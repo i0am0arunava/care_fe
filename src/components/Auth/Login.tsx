@@ -85,8 +85,8 @@ const Login = (props: LoginProps) => {
     resendOtpTimeout,
   } = careConfig;
   const initForm: any = {
-    username: "",
-    password: "",
+    username: "care-doctor",
+    password: "Ohcn@123",
   };
   const { forgot } = props;
   const [params] = useQueryParams();
