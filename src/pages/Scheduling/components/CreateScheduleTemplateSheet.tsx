@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { isAfter, isBefore, parse } from "date-fns";
+import dayjs from "dayjs";
 import { useQueryParams } from "raviger";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
@@ -82,12 +82,13 @@ export default function CreateScheduleTemplateSheet({
   const formSchema = z
     .object({
       name: z.string().min(1, t("field_required")),
-      valid_from: z.date({
-        required_error: t("field_required"),
-      }),
-      valid_to: z.date({
-        required_error: t("field_required"),
-      }),
+      valid_from: z
+        .date({ required_error: t("field_required") })
+        .min(dayjs().startOf("day").toDate(), {
+          message: t("schedule_creation_for_past_validation_error"),
+        }),
+      valid_to: z.date({ required_error: t("field_required") }),
+
       weekdays: z
         .array(z.number() as unknown as z.ZodType<DayOfWeek>)
         .min(1, t("schedule_weekdays_min_error")),
@@ -99,7 +100,7 @@ export default function CreateScheduleTemplateSheet({
               z.object({
                 slot_type: z.literal("appointment"),
                 name: z.string().min(1, t("field_required")),
-                reason: z.string(),
+                reason: z.string().trim(),
                 start_time: z
                   .string()
                   .min(1, t("field_required")) as unknown as z.ZodType<Time>,
@@ -121,7 +122,7 @@ export default function CreateScheduleTemplateSheet({
               z.object({
                 slot_type: z.enum(["open", "closed"]),
                 name: z.string().min(1, t("field_required")),
-                reason: z.string(),
+                reason: z.string().trim(),
                 start_time: z
                   .string()
                   .min(1, t("field_required")) as unknown as z.ZodType<Time>,
@@ -135,9 +136,9 @@ export default function CreateScheduleTemplateSheet({
             .refine(
               (data) => {
                 // Validate each availability's time range
-                const startTime = parse(data.start_time, "HH:mm", new Date());
-                const endTime = parse(data.end_time, "HH:mm", new Date());
-                return isBefore(startTime, endTime);
+                const startTime = dayjs(data.start_time, "HH:mm");
+                const endTime = dayjs(data.end_time, "HH:mm");
+                return startTime.isBefore(endTime);
               },
               {
                 message: t("start_time_must_be_before_end_time"),
@@ -147,12 +148,15 @@ export default function CreateScheduleTemplateSheet({
         )
         .min(1, t("schedule_sessions_min_error")),
     })
-    .refine((data) => !isAfter(data.valid_from, data.valid_to), {
-      message: t("from_date_must_be_before_to_date"),
-      path: ["valid_from"],
-    });
+    .refine(
+      (data) => !dayjs(data.valid_to).isBefore(dayjs(data.valid_from), "day"),
+      {
+        path: ["valid_to"],
+        message: t("to_date_equal_or_after_from_date"),
+      },
+    );
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
@@ -177,7 +181,7 @@ export default function CreateScheduleTemplateSheet({
 
   const { mutate: createTemplate, isPending } = useMutation({
     mutationFn: mutate(scheduleApis.templates.create, {
-      pathParams: { facility_id: facilityId },
+      pathParams: { facilityId },
     }),
     onSuccess: () => {
       toast.success("Schedule template created successfully");
@@ -273,7 +277,7 @@ export default function CreateScheduleTemplateSheet({
           </Button>
         )}
       </SheetTrigger>
-      <SheetContent className="flex min-w-full flex-col bg-gray-100 sm:min-w-fit ">
+      <SheetContent className="flex min-w-full flex-col bg-gray-100 sm:min-w-fit">
         <SheetHeader>
           <SheetTitle>{t("create_schedule_template")}</SheetTitle>
           <SheetDescription className="sr-only">
@@ -313,6 +317,9 @@ export default function CreateScheduleTemplateSheet({
                       <DatePicker
                         date={field.value}
                         onChange={(date) => field.onChange(date)}
+                        disabled={(date) =>
+                          dayjs(date).isBefore(dayjs(), "day")
+                        }
                       />
                       <FormMessage />
                     </FormItem>
@@ -328,6 +335,9 @@ export default function CreateScheduleTemplateSheet({
                       <DatePicker
                         date={field.value}
                         onChange={(date) => field.onChange(date)}
+                        disabled={(date) =>
+                          dayjs(date).isBefore(dayjs(), "day")
+                        }
                       />
                       <FormMessage />
                     </FormItem>
@@ -555,6 +565,8 @@ export default function CreateScheduleTemplateSheet({
                                         <FormControl>
                                           <Input
                                             type="number"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             min={1}
                                             defaultValue={1}
                                             {...field}
@@ -589,6 +601,8 @@ export default function CreateScheduleTemplateSheet({
                                   <FormControl>
                                     <Input
                                       type="number"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
                                       min={0}
                                       placeholder="e.g. 10"
                                       {...field}
@@ -620,6 +634,8 @@ export default function CreateScheduleTemplateSheet({
                                   <FormControl>
                                     <Input
                                       type="number"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
                                       min={0}
                                       placeholder="e.g. 1"
                                       {...field}
@@ -696,7 +712,12 @@ export default function CreateScheduleTemplateSheet({
 
               <SheetFooter className="absolute inset-x-0 bottom-0 border-t border-gray-200 bg-white p-6">
                 <SheetClose asChild>
-                  <Button variant="outline" type="button" disabled={isPending}>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => form.reset()}
+                  >
                     {t("cancel")}
                   </Button>
                 </SheetClose>

@@ -25,7 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import Page from "@/components/Common/Page";
-import SearchByMultipleFields from "@/components/Common/SearchByMultipleFields";
+import SearchInput from "@/components/Common/SearchInput";
 import { CardGridSkeleton } from "@/components/Common/SkeletonLoading";
 import EncounterInfoCard from "@/components/Encounter/EncounterInfoCard";
 
@@ -33,8 +33,11 @@ import useFilters from "@/hooks/useFilters";
 
 import routes from "@/Utils/request/api";
 import query from "@/Utils/request/query";
-import { PaginatedResponse } from "@/Utils/request/types";
-import { Encounter, EncounterPriority } from "@/types/emr/encounter";
+import {
+  ENCOUNTER_STATUS_ICONS,
+  Encounter,
+  EncounterPriority,
+} from "@/types/emr/encounter/encounter";
 
 interface EncounterListProps {
   encounters?: Encounter[];
@@ -87,6 +90,7 @@ export function EncounterList({
     limit: 15,
     cacheBlacklist: ["name", "encounter_id", "external_identifier"],
   });
+  const { t } = useTranslation();
   const {
     status,
     encounter_class: encounterClass,
@@ -120,9 +124,7 @@ export function EncounterList({
     [status, encounterClass, priority, updateQuery],
   );
 
-  const { data: queryEncounters, isLoading } = useQuery<
-    PaginatedResponse<Encounter>
-  >({
+  const { data: queryEncounters, isLoading } = useQuery({
     queryKey: ["encounters", facilityId, qParams],
     queryFn: query.debounced(routes.encounter.list, {
       queryParams: {
@@ -136,7 +138,7 @@ export function EncounterList({
     enabled: !propEncounters && !encounter_id,
   });
 
-  const { data: queryEncounter } = useQuery<Encounter>({
+  const { data: queryEncounter } = useQuery({
     queryKey: ["encounter", encounter_id],
     queryFn: query(routes.encounter.get, {
       pathParams: { id: encounter_id },
@@ -149,24 +151,24 @@ export function EncounterList({
   const searchOptions = [
     {
       key: "name",
-      label: "Patient Name",
       type: "text" as const,
-      placeholder: "Search by patient name",
+      placeholder: t("search_by_patient_name"),
       value: name || "",
+      display: t("name"),
     },
     {
       key: "encounter_id",
-      label: "Encounter ID",
       type: "text" as const,
-      placeholder: "Search by encounter ID",
+      placeholder: t("search_by_encounter_id"),
       value: encounter_id || "",
+      display: t("encounter_id"),
     },
     {
       key: "external_identifier",
-      label: "External ID",
       type: "text" as const,
-      placeholder: "Search by external ID",
+      placeholder: t("search_by_external_id"),
       value: external_identifier || "",
+      display: t("external_identifier"),
     },
   ];
 
@@ -175,16 +177,11 @@ export function EncounterList({
     queryEncounters?.results ||
     (queryEncounter ? [queryEncounter] : []);
 
-  const { t } = useTranslation();
-
   return (
     <Page
       title={t("encounters")}
       componentRight={
-        <Badge
-          className="bg-purple-50 text-purple-700 ml-2 text-sm font-medium rounded-xl px-3 m-3 w-max"
-          variant="outline"
-        >
+        <Badge className="bg-purple-50 text-purple-700 ml-2 rounded-xl px-3 py-0.5 m-3 w-max border-gray-200">
           {isLoading
             ? t("loading")
             : t("entity_count", {
@@ -222,7 +219,7 @@ export function EncounterList({
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
-                    className="w-[20rem] p-3"
+                    className="w-[20rem] p-3 border-none"
                     align="start"
                     onEscapeKeyDown={(event) => event.preventDefault()}
                   >
@@ -230,15 +227,9 @@ export function EncounterList({
                       <h4 className="font-medium leading-none">
                         {t("search_encounters")}
                       </h4>
-                      <SearchByMultipleFields
-                        id="encounter-search"
+                      <SearchInput
+                        data-cy="encounter-search"
                         options={searchOptions}
-                        initialOptionIndex={Math.max(
-                          searchOptions.findIndex(
-                            (option) => option.value !== "",
-                          ),
-                          0,
-                        )}
                         onFieldChange={handleFieldChange}
                         onSearch={handleSearch}
                         className="w-full border-none shadow-none"
@@ -456,73 +447,33 @@ export function EncounterList({
                       >
                         {t("all_status")}
                       </TabsTrigger>
-                      <TabsTrigger
-                        data-cy="planned-filter"
-                        value="planned"
-                        className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                        onClick={() =>
-                          updateQuery({
-                            ...{ encounter_class: encounterClass, priority },
-                            status: "planned",
-                          })
-                        }
-                      >
-                        <CareIcon icon="l-calender" className="size-4" />
-                        {t("encounter_status__planned")}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        data-cy="in-progress-filter"
-                        value="in_progress"
-                        className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                        onClick={() =>
-                          updateQuery({
-                            ...{ encounter_class: encounterClass, priority },
-                            status: "in_progress",
-                          })
-                        }
-                      >
-                        <CareIcon icon="l-spinner" className="size-4" />
-                        {t("encounter_class__in_progress")}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="discharged"
-                        className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                        onClick={() =>
-                          updateQuery({
-                            ...{ encounter_class: encounterClass, priority },
-                            status: "discharged",
-                          })
-                        }
-                      >
-                        <CareIcon icon="l-home" className="size-4" />
-                        {t("discharge")}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="completed"
-                        className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                        onClick={() =>
-                          updateQuery({
-                            ...{ encounter_class: encounterClass, priority },
-                            status: "completed",
-                          })
-                        }
-                      >
-                        <CareIcon icon="l-check" className="size-4" />
-                        {t("completed")}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="cancelled"
-                        className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                        onClick={() =>
-                          updateQuery({
-                            ...{ encounter_class: encounterClass, priority },
-                            status: "cancelled",
-                          })
-                        }
-                      >
-                        <CareIcon icon="l-x" className="size-4" />
-                        {t("cancelled")}
-                      </TabsTrigger>
+                      {(
+                        [
+                          "planned",
+                          "in_progress",
+                          "discharged",
+                          "completed",
+                          "cancelled",
+                        ] as const
+                      ).map((status) => (
+                        <TabsTrigger
+                          key={status}
+                          value={status}
+                          className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
+                          onClick={() =>
+                            updateQuery({
+                              ...{ encounter_class: encounterClass, priority },
+                              status,
+                            })
+                          }
+                        >
+                          <CareIcon
+                            icon={ENCOUNTER_STATUS_ICONS[status]}
+                            className="size-4"
+                          />
+                          {t(`encounter_status__${status}`)}
+                        </TabsTrigger>
+                      ))}
                     </div>
                   </TabsList>
                 </Tabs>

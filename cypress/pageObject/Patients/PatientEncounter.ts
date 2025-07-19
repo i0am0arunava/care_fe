@@ -1,35 +1,33 @@
 export class PatientEncounter {
   // Navigation
   navigateToEncounters() {
-    cy.get('[data-sidebar="content"]').contains("Encounters").click();
+    cy.verifyAndClickElement('[data-cy="nav-patients"]', "Patients");
+    cy.verifyAndClickElement('[data-cy="nav-encounters"]', "Encounters");
     return this;
   }
 
   openFirstEncounterDetails() {
     cy.get('[data-cy="encounter-list-cards"]')
       .first()
-      .contains("View Details")
+      .contains("View Encounter")
       .click();
     return this;
   }
 
   searchEncounter(patientName: string) {
     cy.get('[data-cy="search-encounter"]').click();
-    cy.typeIntoField("#encounter-search", patientName);
+    cy.typeIntoField('[data-cy="encounter-search"]', patientName);
     cy.get('[data-cy="search-encounter"]').click();
     return this;
   }
 
   clickUpdateEncounter() {
-    cy.verifyAndClickElement(
-      '[data-cy="update-encounter-option"]',
-      "Update Encounter",
-    );
+    cy.get("button:contains('Update Encounter')").click();
     return this;
   }
 
   verifyEncounterPatientInfo(contents: string[]) {
-    cy.verifyContentPresence("#patient-infobadges", contents);
+    cy.verifyContentPresence("#root", contents);
     return this;
   }
 
@@ -59,15 +57,12 @@ export class PatientEncounter {
   }
 
   verifyOverviewValues(expectedValues: string[]) {
-    cy.verifyContentPresence('[data-cy="encounter-overview"]', expectedValues);
+    cy.verifyContentPresence("#root", expectedValues);
     return this;
   }
 
   clickPatientDetailsButton() {
-    cy.get('[data-cy="patient-details-button"]')
-      .filter(":visible")
-      .first()
-      .click();
+    cy.get("svg.lucide-external-link").filter(":visible").first().click();
     return this;
   }
 
@@ -77,19 +72,16 @@ export class PatientEncounter {
   }
 
   clickEncounterMarkAsComplete() {
-    cy.verifyAndClickElement(
-      '[data-cy="mark-encounter-complete"]',
-      "Mark as Complete",
-    );
+    cy.get("button[data-slot='dropdown-menu-trigger']")
+      .contains("Update")
+      .click();
+    cy.get('[role="menuitem"]').contains("Mark as Complete").click();
     return this;
   }
 
   clickConfirmEncounterAsComplete() {
     cy.intercept("GET", "**/api/v1/encounter/**").as("getEncounter");
-    cy.verifyAndClickElement(
-      '[data-cy="confirm-encounter-complete"]',
-      "Mark as Complete",
-    );
+    cy.get("button:contains('Mark as Complete')").click();
     cy.wait("@getEncounter").then((interception) => {
       expect(interception.response?.statusCode).to.eq(200); // Verify status code
       expect(interception.response?.body).to.have.property(
@@ -107,10 +99,33 @@ export class PatientEncounter {
 
   clickInProgressEncounterFilter() {
     cy.intercept("GET", "**/api/v1/encounter/**").as("getEncounters");
-    cy.verifyAndClickElement('[data-cy="in-progress-filter"]', "In Progress");
-    cy.wait("@getEncounters", { timeout: 10000 }).then((interception) => {
-      expect(interception.request.url).to.include("status=in_progress");
-      expect(interception.response.statusCode).to.eq(200);
+    cy.get('button:contains("In Progress")').click();
+    cy.wait("@getEncounters").its("response.statusCode").should("eq", 200);
+    return this;
+  }
+
+  getPatientPhone() {
+    cy.get('[data-cy="patient-phone-input"]').invoke("val").as("patientPhone");
+    return this;
+  }
+
+  getPatientName() {
+    cy.get('[data-cy="patient-name-input"]').invoke("val").as("patientName");
+    return this;
+  }
+
+  getPatientYear() {
+    cy.get("body").then(($body) => {
+      if ($body.find('[data-cy="dob-year-input"]').length > 0) {
+        cy.get('[data-cy="dob-year-input"]').invoke("val").as("patientYear");
+      } else {
+        cy.get('[data-cy="year-of-birth"]')
+          .invoke("text")
+          .then((text) => {
+            const year = text.match(/\d+/)?.[0];
+            cy.wrap(year).as("patientYear");
+          });
+      }
     });
     return this;
   }

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   ArchiveIcon,
+  Eye,
   FileCheckIcon,
   HelpCircle,
   NotepadTextDashedIcon,
@@ -41,7 +42,10 @@ import {
 import useFilters from "@/hooks/useFilters";
 
 import query from "@/Utils/request/query";
-import { ValuesetBase } from "@/types/valueset/valueset";
+import {
+  VALUESET_STATUS_COLORS,
+  ValuesetBase,
+} from "@/types/valueset/valueset";
 import valuesetApi from "@/types/valueset/valuesetApi";
 
 function EmptyState() {
@@ -85,28 +89,11 @@ const RenderCard = ({
               <CardContent className="p-6 relative">
                 <div className="absolute top-4 right-4">
                   <Badge
-                    className={
-                      {
-                        active:
-                          "bg-green-100 text-green-800 hover:bg-green-200",
-                        draft:
-                          "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
-                        retired: "bg-red-100 text-red-800 hover:bg-red-200",
-                        unknown: "bg-gray-100 text-gray-800 hover:bg-gray-200",
-                      }[valueset.status]
-                    }
+                    variant={VALUESET_STATUS_COLORS[valueset.status]}
+                    className="whitespace-nowrap"
                   >
                     {t(valueset.status)}
                   </Badge>
-                </div>
-
-                <div className="mb-4 border-b border-gray-200 pb-2">
-                  <h3 className="text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    {t("name")}
-                  </h3>
-                  <p className="mt-2 text-xl font-bold text-gray-900 truncate">
-                    {valueset.name}
-                  </p>
                 </div>
 
                 <div className="mb-4 border-b pb-2 border-gray-200">
@@ -116,12 +103,12 @@ const RenderCard = ({
                   {valueset.name && valueset.name.length > 20 ? (
                     <TooltipProvider>
                       <Tooltip>
-                        <TooltipTrigger className="turncate">
+                        <TooltipTrigger className="w-full flex">
                           <p className="mt-2 text-xl font-bold text-gray-900 truncate">
                             {valueset.name}
                           </p>
                         </TooltipTrigger>
-                        <TooltipContent className="bg-black text-white z-40">
+                        <TooltipContent className="bg-black text-white">
                           {valueset.name}
                         </TooltipContent>
                       </Tooltip>
@@ -161,21 +148,28 @@ const RenderCard = ({
                   </p>
                 </div>
 
-                {!valueset.is_system_defined && (
-                  <div className="mt-4 flex justify-end">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        navigate(`/admin/valuesets/${valueset.slug}/edit`)
-                      }
-                      className="hover:bg-primary/5"
-                    >
-                      <Pencil className="size-4 mr-0" />
-                      {t("edit")}
-                    </Button>
-                  </div>
-                )}
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate(`/admin/valuesets/${valueset.slug}/edit`)
+                    }
+                    className="hover:bg-primary/5"
+                  >
+                    {valueset.is_system_defined ? (
+                      <>
+                        <Eye className="size-4 mr-0" />
+                        {t("view")}
+                      </>
+                    ) : (
+                      <>
+                        <Pencil className="size-4 mr-0" />
+                        {t("edit")}
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -228,12 +222,12 @@ const RenderTable = ({
                   {valueset.name && valueset.name.length > 20 ? (
                     <TooltipProvider>
                       <Tooltip>
-                        <TooltipTrigger>
+                        <TooltipTrigger className="flex w-full">
                           <div className="text-sm font-medium text-gray-900 truncate">
                             {valueset.name}
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent className="bg-black text-white z-40">
+                        <TooltipContent className="bg-black text-white">
                           {valueset.name}
                         </TooltipContent>
                       </Tooltip>
@@ -249,16 +243,8 @@ const RenderTable = ({
                 </TableCell>
                 <TableCell className="whitespace-nowrap px-6 py-4">
                   <Badge
-                    className={
-                      {
-                        active:
-                          "bg-green-100 text-green-800 hover:bg-green-200",
-                        draft:
-                          "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
-                        retired: "bg-red-100 text-red-800 hover:bg-red-200",
-                        unknown: "bg-gray-100 text-gray-800 hover:bg-gray-200",
-                      }[valueset.status]
-                    }
+                    variant={VALUESET_STATUS_COLORS[valueset.status]}
+                    className="whitespace-nowrap"
                   >
                     {t(valueset.status)}
                   </Badge>
@@ -269,18 +255,25 @@ const RenderTable = ({
                   </div>
                 </TableCell>
                 <TableCell className="whitespace-nowrap px-6 py-4 text-sm">
-                  {!valueset.is_system_defined && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        navigate(`/admin/valuesets/${valueset.slug}/edit`)
-                      }
-                    >
-                      <Pencil className="size-4 mr-0" />
-                      {t("edit")}
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate(`/admin/valuesets/${valueset.slug}/edit`)
+                    }
+                  >
+                    {valueset.is_system_defined ? (
+                      <>
+                        <Eye className="size-4 mr-0" />
+                        {t("view")}
+                      </>
+                    ) : (
+                      <>
+                        <Pencil className="size-4 mr-0" />
+                        {t("edit")}
+                      </>
+                    )}
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -299,7 +292,7 @@ export function ValueSetList() {
   });
   const { data: response, isLoading } = useQuery({
     queryKey: ["valuesets", qParams],
-    queryFn: query(valuesetApi.list, {
+    queryFn: query.debounced(valuesetApi.list, {
       queryParams: {
         limit: resultsPerPage,
         offset: ((qParams.page ?? 1) - 1) * resultsPerPage,

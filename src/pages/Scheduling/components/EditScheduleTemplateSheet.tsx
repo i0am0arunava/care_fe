@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { isBefore, parse } from "date-fns";
+import dayjs from "dayjs";
 import { Loader2, SaveIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -163,16 +163,14 @@ const ScheduleTemplateEditor = ({
       }),
     })
     .refine(
-      (data) => {
-        return isBefore(data.valid_from, data.valid_to);
-      },
+      (data) => !dayjs(data.valid_to).isBefore(dayjs(data.valid_from), "day"),
       {
-        message: t("from_date_must_be_before_to_date"),
-        path: ["valid_from"],
+        message: t("to_date_equal_or_after_from_date"),
+        path: ["valid_to"],
       },
     );
 
-  const form = useForm<z.infer<typeof templateFormSchema>>({
+  const form = useForm({
     resolver: zodResolver(templateFormSchema),
     defaultValues: {
       name: template.name,
@@ -183,10 +181,7 @@ const ScheduleTemplateEditor = ({
 
   const { mutate: updateTemplate, isPending: isUpdating } = useMutation({
     mutationFn: mutate(scheduleApis.templates.update, {
-      pathParams: {
-        facility_id: facilityId,
-        id: template.id,
-      },
+      pathParams: { facilityId, id: template.id },
     }),
     onSuccess: () => {
       toast.success("Schedule template updated successfully");
@@ -198,10 +193,7 @@ const ScheduleTemplateEditor = ({
 
   const { mutate: deleteTemplate, isPending: isDeleting } = useMutation({
     mutationFn: mutate(scheduleApis.templates.delete, {
-      pathParams: {
-        facility_id: facilityId,
-        id: template.id,
-      },
+      pathParams: { facilityId, id: template.id },
     }),
     onSuccess: () => {
       toast.success(t("template_deleted"));
@@ -361,11 +353,7 @@ const AvailabilityEditor = ({
 
   const { mutate: deleteAvailability, isPending: isDeleting } = useMutation({
     mutationFn: mutate(scheduleApis.templates.availabilities.delete, {
-      pathParams: {
-        facility_id: facilityId,
-        schedule_id: scheduleId,
-        id: availability.id,
-      },
+      pathParams: { facilityId, scheduleId, id: availability.id },
     }),
     onSuccess: () => {
       toast.success(t("schedule_availability_deleted_successfully"));
@@ -579,7 +567,7 @@ const NewAvailabilityCard = ({
         .min(1, t("field_required")) as unknown as z.ZodType<Time>,
       slot_size_in_minutes: z.number().nullable(),
       tokens_per_slot: z.number().nullable(),
-      reason: z.string(),
+      reason: z.string().trim(),
       weekdays: z
         .array(z.number() as unknown as z.ZodType<DayOfWeek>)
         .min(1, t("schedule_weekdays_min_error")),
@@ -589,10 +577,10 @@ const NewAvailabilityCard = ({
     .refine(
       (data) => {
         // Parse time strings into Date objects for comparison
-        const startTime = parse(data.start_time, "HH:mm", new Date());
-        const endTime = parse(data.end_time, "HH:mm", new Date());
+        const startTime = dayjs(data.start_time, "HH:mm");
+        const endTime = dayjs(data.end_time, "HH:mm");
 
-        return isBefore(startTime, endTime);
+        return startTime.isBefore(endTime);
       },
       {
         message: t("start_time_must_be_before_end_time"),
@@ -600,7 +588,7 @@ const NewAvailabilityCard = ({
       },
     );
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
@@ -618,10 +606,7 @@ const NewAvailabilityCard = ({
 
   const { mutate: createAvailability, isPending } = useMutation({
     mutationFn: mutate(scheduleApis.templates.availabilities.create, {
-      pathParams: {
-        facility_id: facilityId,
-        schedule_id: scheduleId,
-      },
+      pathParams: { facilityId, scheduleId },
     }),
     onSuccess: () => {
       toast.success(t("schedule_availability_created_successfully"));
@@ -855,6 +840,8 @@ const NewAvailabilityCard = ({
                             <FormControl>
                               <Input
                                 type="number"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 min={1}
                                 defaultValue={1}
                                 {...field}
@@ -885,6 +872,8 @@ const NewAvailabilityCard = ({
                       <FormControl>
                         <Input
                           type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           min={0}
                           placeholder="e.g. 10"
                           {...field}
@@ -911,6 +900,8 @@ const NewAvailabilityCard = ({
                       <FormControl>
                         <Input
                           type="number"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           min={0}
                           placeholder="e.g. 1"
                           {...field}

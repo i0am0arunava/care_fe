@@ -37,14 +37,16 @@ import ValueSetSelect from "@/components/Questionnaire/ValueSetSelect";
 
 import mutate from "@/Utils/request/mutate";
 import { formatName } from "@/Utils/utils";
+import FacilityOrganizationSelector from "@/pages/Facility/settings/organizations/components/FacilityOrganizationSelector";
+import { Code } from "@/types/base/code/code";
 import careTeamApi from "@/types/careTeam/careTeamApi";
-import { Encounter } from "@/types/emr/encounter";
-import { Code } from "@/types/questionnaire/code";
+import { Encounter } from "@/types/emr/encounter/encounter";
 import { UserBase } from "@/types/user/user";
 
 type CareTeamSheetProps = {
   trigger: React.ReactNode;
   encounter: Encounter;
+  canWrite: boolean;
 };
 
 export function EmptyState() {
@@ -61,11 +63,16 @@ export function EmptyState() {
   );
 }
 
-export function CareTeamSheet({ trigger, encounter }: CareTeamSheetProps) {
+export function CareTeamSheet({
+  trigger,
+  encounter,
+  canWrite,
+}: CareTeamSheetProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<UserBase | undefined>();
+  const [selectedOrganization, setSelectedOrganization] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<Code | null>(null);
   const [memberToRemove, setMemberToRemove] = useState<UserBase | undefined>();
 
@@ -124,6 +131,11 @@ export function CareTeamSheet({ trigger, encounter }: CareTeamSheetProps) {
 
     setSelectedUser(undefined);
     setSelectedRole(null);
+  };
+
+  const handleOrganizationChange = (value: string[] | null) => {
+    setSelectedOrganization(value ? value[0] : "");
+    setSelectedUser(undefined);
   };
 
   const confirmRemoveMember = (member: UserBase) => {
@@ -191,133 +203,155 @@ export function CareTeamSheet({ trigger, encounter }: CareTeamSheetProps) {
       <SheetContent className="w-full sm:max-w-3xl pr-0">
         <SheetHeader className="space-y-1 mr-2">
           <SheetTitle className="text-xl font-semibold">
-            {t("manage_care_team")}
+            {canWrite ? t("manage_care_team") : t("view_care_team")}
           </SheetTitle>
         </SheetHeader>
 
         <ScrollArea className="h-full my-6 pb-12 pr-6">
           <div className="space-y-6">
-            <div className="flex flex-col md:flex-row gap-2">
-              <div className="flex flex-col">
-                <UserSelector
-                  selected={selectedUser}
-                  onChange={setSelectedUser}
-                  placeholder={t("select_member")}
-                  facilityId={encounter.facility.id}
-                />
-              </div>
-              <ValueSetSelect
-                system="system-practitioner-role-code"
-                value={selectedRole}
-                onSelect={setSelectedRole}
-                placeholder={t("select_role")}
-              />
-              <Button
-                size="icon"
-                onClick={handleAddMember}
-                disabled={!selectedUser || !selectedRole || isPending}
-                className="w-full md:w-auto px-2 cursor-pointer"
-              >
-                {t("add")}
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              {encounter.care_team.length === 0 ? (
-                <EmptyState />
-              ) : (
-                encounter.care_team.map((member, index) => (
-                  <div
-                    key={member.member.id}
-                    className="flex flex-col gap-2 rounded-lg border p-2"
+            <FacilityOrganizationSelector
+              singleSelection={true}
+              onChange={handleOrganizationChange}
+              facilityId={encounter.facility.id}
+            />
+            <div className="flex flex-col gap-3">
+              {canWrite && (
+                <div className="flex flex-col gap-4">
+                  {selectedOrganization && (
+                    <div className="flex flex-col">
+                      <UserSelector
+                        selected={selectedUser}
+                        onChange={setSelectedUser}
+                        placeholder={t("select_member")}
+                        facilityId={encounter.facility.id}
+                        organizationId={selectedOrganization}
+                      />
+                    </div>
+                  )}
+                  <ValueSetSelect
+                    system="system-practitioner-role-code"
+                    value={selectedRole}
+                    onSelect={setSelectedRole}
+                    placeholder={t("select_role")}
+                  />
+                  <Button
+                    size="icon"
+                    onClick={handleAddMember}
+                    disabled={!selectedUser || !selectedRole || isPending}
+                    className="w-full md:w-auto px-2 cursor-pointer"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Avatar
-                          name={formatName(member.member)}
-                          imageUrl={member.member?.profile_picture_url}
-                          className="size-8"
-                        />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">
-                              {formatName(member.member)}
-                            </p>
-                            {index === 0 && (
-                              <Badge variant="primary" className="font-normal">
-                                {t("primary")}
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-500">
-                            {member.role.display}
-                          </p>
-                        </div>
-                      </div>
+                    {t("add")}
+                  </Button>
+                </div>
+              )}
 
-                      <div className="flex items-center gap-1 flex-col-reverse md:flex-row">
-                        <div className="hidden md:block">
-                          {index !== 0 && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleMakePrimary(index)}
-                              disabled={isPending}
-                              className="cursor-pointer"
-                            >
-                              {t("mark_as_primary")}
-                            </Button>
-                          )}
+              <div className="space-y-2">
+                {encounter.care_team.length === 0 ? (
+                  <EmptyState />
+                ) : (
+                  encounter.care_team.map((member, index) => (
+                    <div
+                      key={member.member.id}
+                      className="flex flex-col gap-2 rounded-lg border p-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Avatar
+                            name={formatName(member.member)}
+                            imageUrl={member.member?.profile_picture_url}
+                            className="size-8"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">
+                                {formatName(member.member)}
+                              </p>
+                              {index === 0 && (
+                                <Badge
+                                  variant="primary"
+                                  className="font-normal"
+                                >
+                                  {t("primary")}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500">
+                              {member.role.display}
+                            </p>
+                          </div>
                         </div>
-                        <div className="md:hidden">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+
+                        <div className="flex items-center gap-1 flex-col-reverse md:flex-row">
+                          <div className="hidden md:block">
+                            {canWrite && index !== 0 && (
                               <Button
-                                variant="ghost"
-                                size="icon"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMakePrimary(index)}
                                 disabled={isPending}
                                 className="cursor-pointer"
                               >
-                                <MoreVertical className="size-4" />
+                                {t("mark_as_primary")}
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {index !== 0 && (
-                                <DropdownMenuItem
-                                  onClick={() => handleMakePrimary(index)}
+                            )}
+                          </div>
+                          {canWrite && (
+                            <>
+                              <div className="md:hidden">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      disabled={isPending}
+                                      className="cursor-pointer"
+                                    >
+                                      <MoreVertical className="size-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {index !== 0 && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleMakePrimary(index)}
+                                        disabled={isPending}
+                                      >
+                                        {t("mark_as_primary")}
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      onClick={() =>
+                                        confirmRemoveMember(member.member)
+                                      }
+                                      disabled={isPending}
+                                      className="text-destructive"
+                                    >
+                                      {t("remove")}
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+
+                              <div className="hidden md:block">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() =>
+                                    confirmRemoveMember(member.member)
+                                  }
                                   disabled={isPending}
+                                  className="cursor-pointer"
                                 >
-                                  {t("mark_as_primary")}
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  confirmRemoveMember(member.member)
-                                }
-                                disabled={isPending}
-                                className="text-destructive"
-                              >
-                                {t("remove")}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                        <div className="hidden md:block">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => confirmRemoveMember(member.member)}
-                            disabled={isPending}
-                            className="cursor-pointer"
-                          >
-                            <X className="size-4" />
-                          </Button>
+                                  <X className="size-4" />
+                                </Button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </ScrollArea>

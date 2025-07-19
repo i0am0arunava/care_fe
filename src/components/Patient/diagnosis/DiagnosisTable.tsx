@@ -19,10 +19,12 @@ import {
 } from "@/components/ui/table";
 
 import { Avatar } from "@/components/Common/Avatar";
+import RelativeDateTooltip from "@/components/Common/RelativeDateTooltip";
 
+import { formatName } from "@/Utils/utils";
 import {
-  DIAGNOSIS_CLINICAL_STATUS_STYLES,
-  DIAGNOSIS_VERIFICATION_STATUS_STYLES,
+  DIAGNOSIS_CLINICAL_STATUS_COLORS,
+  DIAGNOSIS_VERIFICATION_STATUS_COLORS,
   Diagnosis,
 } from "@/types/emr/diagnosis/diagnosis";
 
@@ -43,19 +45,19 @@ export function DiagnosisTable({ diagnoses, title }: DiagnosisTableProps) {
           <TableHead className="first:rounded-l-md h-auto  py-1 px-2  text-gray-600">
             {title}
           </TableHead>
-          <TableHead className="h-auto  py-1 px-2  text-gray-600">
+          <TableHead className="h-auto  py-1 px-2  text-gray-600 text-center">
             {t("status")}
           </TableHead>
-          <TableHead className="h-auto  py-1 px-2 text-gray-600">
+          <TableHead className="h-auto  py-1 px-2 text-gray-600 text-center">
             {t("verification")}
           </TableHead>
-          <TableHead className="h-auto  py-1 px-2  text-gray-600">
+          <TableHead className="h-auto  py-1 px-2  text-gray-600 text-center">
             {t("onset")}
           </TableHead>
-          <TableHead className="h-auto  py-1 px-2  text-gray-600">
+          <TableHead className="h-auto  py-1 px-2  text-gray-600 text-center">
             {t("notes")}
           </TableHead>
-          <TableHead className="last:rounded-r-md h-auto  py-1 px-2 text-gray-600">
+          <TableHead className="last:rounded-r-md h-auto  py-1 px-2 text-gray-600 text-center">
             {t("logged_by")}
           </TableHead>
         </TableRow>
@@ -68,52 +70,44 @@ export function DiagnosisTable({ diagnoses, title }: DiagnosisTableProps) {
               "rounded-md overflow-hidden",
               diagnosis.verification_status === "entered_in_error"
                 ? "opacity-50"
-                : diagnosis.category === "chronic_condition"
-                  ? "bg-yellow-50/50"
-                  : "bg-gray-50",
+                : "bg-gray-50",
             )}
           >
             <TableCell className="font-medium first:rounded-l-md">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 md:whitespace-normal">
                 {diagnosis.code.display}
-                {diagnosis.category === "chronic_condition" && (
-                  <Badge
-                    variant="outline"
-                    className="bg-yellow-100 text-yellow-700 text-xs"
-                  >
-                    {t("chronic_condition", { count: 1 })}
-                  </Badge>
-                )}
               </div>
             </TableCell>
-            <TableCell>
+            <TableCell className="text-center">
               <Badge
-                variant="outline"
-                className={`whitespace-nowrap ${
-                  DIAGNOSIS_CLINICAL_STATUS_STYLES[diagnosis.clinical_status]
-                }`}
+                variant={
+                  DIAGNOSIS_CLINICAL_STATUS_COLORS[diagnosis.clinical_status]
+                }
+                className="whitespace-nowrap"
               >
                 {t(diagnosis.clinical_status)}
               </Badge>
             </TableCell>
-            <TableCell>
+            <TableCell className="text-center">
               <Badge
-                variant="outline"
-                className={`whitespace-nowrap capitalize ${
-                  DIAGNOSIS_VERIFICATION_STATUS_STYLES[
+                variant={
+                  DIAGNOSIS_VERIFICATION_STATUS_COLORS[
                     diagnosis.verification_status
                   ]
-                }`}
+                }
+                className="whitespace-nowrap capitalize"
               >
                 {t(diagnosis.verification_status)}
               </Badge>
             </TableCell>
-            <TableCell className="whitespace-nowrap">
-              {diagnosis.onset?.onset_datetime
-                ? new Date(diagnosis.onset.onset_datetime).toLocaleDateString()
-                : "-"}
+            <TableCell className="whitespace-nowrap text-center">
+              {diagnosis.onset?.onset_datetime ? (
+                <RelativeDateTooltip date={diagnosis.onset.onset_datetime} />
+              ) : (
+                "-"
+              )}
             </TableCell>
-            <TableCell className="max-w-[200px]">
+            <TableCell className="max-w-[200px] text-center">
               {diagnosis.note ? (
                 <div className="flex items-center gap-2">
                   <Popover>
@@ -137,7 +131,7 @@ export function DiagnosisTable({ diagnoses, title }: DiagnosisTableProps) {
                 "-"
               )}
             </TableCell>
-            <TableCell className="last:rounded-r-md">
+            <TableCell className="last:rounded-r-md text-center">
               <div className="flex items-center gap-2">
                 <Avatar
                   name={diagnosis.created_by.username}
@@ -145,7 +139,9 @@ export function DiagnosisTable({ diagnoses, title }: DiagnosisTableProps) {
                   imageUrl={diagnosis.created_by.profile_picture_url}
                 />
 
-                <span className="text-sm">{diagnosis.created_by.username}</span>
+                <span className="text-sm">
+                  {formatName(diagnosis.created_by)}
+                </span>
               </div>
             </TableCell>
           </TableRow>

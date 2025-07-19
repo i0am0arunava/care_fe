@@ -3,13 +3,15 @@ import { Suspense, lazy } from "react";
 
 import Loading from "@/components/Common/Loading";
 import { patientTabs } from "@/components/Patient/PatientDetailsTab";
-import { PatientDrawingTab } from "@/components/Patient/PatientDetailsTab/PatientDrawingsTab";
 import { PatientHome } from "@/components/Patient/PatientHome";
 import PatientIndex from "@/components/Patient/PatientIndex";
 import PatientRegistration from "@/components/Patient/PatientRegistration";
 
 import { AppRoutes } from "@/Routers/AppRouter";
+import { ConsentDetailPage } from "@/pages/Encounters/ConsentDetail";
 import EncountersOverview from "@/pages/Encounters/EncountersOverview";
+import { EncounterProvider } from "@/pages/Encounters/utils/EncounterProvider";
+import ClinicalHistoryPage from "@/pages/Patient/History";
 import VerifyPatient from "@/pages/Patients/VerifyPatient";
 
 const ExcalidrawEditor = lazy(
@@ -36,9 +38,17 @@ const PatientRoutes: AppRoutes = {
       locationId={locationId}
     />
   ),
-  "/facility/:facilityId/patients/verify": ({ facilityId }) => (
-    <VerifyPatient facilityId={facilityId} />
-  ),
+  "/facility/:facilityId/patient/:patientId/encounter/:encounterId/consents/:consentId":
+    ({ facilityId, patientId, encounterId, consentId }) => (
+      <EncounterProvider
+        encounterId={encounterId}
+        patientId={patientId}
+        facilityId={facilityId}
+      >
+        <ConsentDetailPage consentId={consentId} />
+      </EncounterProvider>
+    ),
+  "/facility/:facilityId/patients/verify": () => <VerifyPatient />,
   "/patient/:id": ({ id }) => <PatientHome id={id} page="demography" />,
   "/patient/:id/update": ({ id }) => <PatientRegistration patientId={id} />,
   ...patientTabs.reduce((acc: AppRoutes, tab) => {
@@ -85,9 +95,6 @@ const PatientRoutes: AppRoutes = {
       />
     </Suspense>
   ),
-  "/patient/:patientId/drawings": ({ patientId }) => (
-    <PatientDrawingTab patientId={patientId} />
-  ),
 
   "/patient/:patientId/drawings/new": ({ patientId }) => {
     return (
@@ -107,6 +114,17 @@ const PatientRoutes: AppRoutes = {
         drawingId={drawingId}
       />
     </Suspense>
+  ),
+  "/facility/:facilityId/patient/:patientId/history/:tab": ({
+    facilityId,
+    patientId,
+    tab,
+  }) => (
+    <ClinicalHistoryPage
+      facilityId={facilityId}
+      patientId={patientId}
+      tab={tab}
+    />
   ),
 };
 

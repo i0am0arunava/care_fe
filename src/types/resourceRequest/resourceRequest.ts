@@ -1,7 +1,7 @@
 import { FacilityModel } from "@/components/Facility/models";
 import { UserBareMinimum } from "@/components/Users/models";
 
-import { PatientModel } from "@/types/emr/patient";
+import { Patient } from "@/types/emr/patient/patient";
 import { UserBase } from "@/types/user/user";
 
 export interface ResourceRequest {
@@ -23,8 +23,18 @@ export interface ResourceRequest {
   updated_by: UserBase;
   created_date: string;
   modified_date: string;
-  related_patient: PatientModel | null;
+  related_patient: Patient | null;
 }
+
+export const RESOURCE_REQUEST_STATUS_COLORS = {
+  pending: "yellow",
+  approved: "green",
+  rejected: "destructive",
+  cancelled: "secondary",
+  transportation_to_be_arranged: "secondary",
+  transfer_in_progress: "secondary",
+  completed: "secondary",
+} as const;
 
 export interface CreateResourceRequest {
   title: string;

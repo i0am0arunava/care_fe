@@ -1,4 +1,4 @@
-import { Code } from "@/types/questionnaire/code";
+import { Code } from "@/types/base/code/code";
 import { UserBase } from "@/types/user/user";
 
 export const SYMPTOM_CLINICAL_STATUS = [
@@ -28,7 +28,7 @@ export const SYMPTOM_SEVERITY = ["severe", "moderate", "mild"] as const;
 
 export type SymptomSeverity = (typeof SYMPTOM_SEVERITY)[number];
 
-type Onset = {
+export type Onset = {
   onset_datetime?: string;
   onset_age?: string;
   onset_string?: string;
@@ -47,6 +47,9 @@ export interface Symptom {
   created_by: UserBase;
   updated_by: UserBase;
   category: string;
+  encounter: string;
+  created_date: string;
+  updated_date?: string;
 }
 
 export interface SymptomRequest {
@@ -60,28 +63,31 @@ export interface SymptomRequest {
   note?: string;
   encounter: string;
   category: string;
+  created_date?: string;
+  updated_date?: string;
+  created_by?: UserBase;
 }
 
-export const SYMPTOM_CLINICAL_STATUS_STYLES = {
-  active: "bg-green-100 text-green-800 border-green-200",
-  recurrence: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  relapse: "bg-red-100 text-red-800 border-red-200",
-  inactive: "bg-gray-100 text-gray-800 border-gray-200",
-  remission: "bg-blue-100 text-blue-800 border-blue-200",
-  resolved: "bg-emerald-100 text-emerald-800 border-emerald-200",
+export const SYMPTOM_CLINICAL_STATUS_COLORS = {
+  active: "primary",
+  recurrence: "yellow",
+  relapse: "destructive",
+  inactive: "secondary",
+  remission: "blue",
+  resolved: "green",
 } as const;
 
-export const SYMPTOM_VERIFICATION_STATUS_STYLES = {
-  unconfirmed: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  provisional: "bg-orange-100 text-orange-800 border-orange-200",
-  differential: "bg-purple-100 text-purple-800 border-purple-200",
-  confirmed: "bg-green-100 text-green-800 border-green-200",
-  refuted: "bg-red-100 text-red-800 border-red-200",
-  entered_in_error: "bg-red-100 text-red-800 border-red-200",
+export const SYMPTOM_VERIFICATION_STATUS_COLORS = {
+  unconfirmed: "yellow",
+  provisional: "orange",
+  differential: "purple",
+  confirmed: "green",
+  refuted: "destructive",
+  entered_in_error: "destructive",
 } as const;
 
-export const SYMPTOM_SEVERITY_STYLES = {
-  severe: "bg-red-100 text-red-800 border-red-200",
-  moderate: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  mild: "bg-blue-100 text-blue-800 border-blue-200",
+export const SYMPTOM_SEVERITY_COLORS = {
+  severe: "destructive",
+  moderate: "yellow",
+  mild: "blue",
 } as const;

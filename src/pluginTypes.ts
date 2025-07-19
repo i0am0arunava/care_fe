@@ -1,10 +1,12 @@
 import { LazyExoticComponent } from "react";
 import { UseFormReturn } from "react-hook-form";
 
-import { EncounterTabProps } from "@/pages/Encounters/EncounterShow";
+import { NavigationLink } from "@/components/ui/sidebar/nav-main";
+
+import { PluginEncounterTabProps } from "@/pages/Encounters/EncounterShow";
 import { DeviceDetail } from "@/types/device/device";
-import { Encounter } from "@/types/emr/encounter";
-import { Patient } from "@/types/emr/newPatient";
+import { Encounter } from "@/types/emr/encounter/encounter";
+import { Patient } from "@/types/emr/patient/patient";
 import { UserBase } from "@/types/user/user";
 
 import { AppRoutes } from "./Routers/AppRouter";
@@ -23,6 +25,7 @@ export type ScribeComponentType = React.FC<{
 
 export type PatientHomeActionsComponentType = React.FC<{
   patient: Patient;
+  facilityId?: string;
   className?: string;
 }>;
 
@@ -47,6 +50,7 @@ export type FacilityHomeActionsComponentType = React.FC<{
 
 export type PatientRegistrationFormComponentType = React.FC<{
   form: UseFormReturn<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  facilityId?: string;
   patientId?: string;
 }>;
 
@@ -100,8 +104,13 @@ export type PluginManifest = {
   plugin: string;
   routes?: AppRoutes;
   extends?: readonly SupportedPluginExtensions[];
+  navItems?: NavigationLink[];
+  userNavItems?: NavigationLink[];
   components?: PluginComponentMap;
-  encounterTabs?: Record<string, LazyComponent<React.FC<EncounterTabProps>>>;
+  encounterTabs?: Record<
+    string,
+    LazyComponent<React.FC<PluginEncounterTabProps>>
+  >;
   devices?: readonly PluginDeviceManifest[];
 };
 

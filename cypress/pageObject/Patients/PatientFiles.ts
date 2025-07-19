@@ -20,6 +20,7 @@ export class PatientFiles {
   }
 
   uploadSingleFile(filePath: string) {
+    // The filePath is already in the format 'cypress/fixtures/filename'
     cy.get('input[type="file"]').selectFile(filePath, { force: true });
     return this;
   }
@@ -43,7 +44,6 @@ export class PatientFiles {
   verifyValidationErrors(errorMessage: string) {
     cy.verifyErrorMessages([
       {
-        label: "Enter File Name",
         message: errorMessage,
       },
     ]);
@@ -51,15 +51,16 @@ export class PatientFiles {
   }
 
   fillMultipleFileNames(fileNames: string[]) {
-    cy.get("input").each(($input, index) => {
-      cy.wrap($input).clear();
-      cy.wrap($input).type(`${fileNames[index]}`);
+    fileNames.forEach((fileName, index) => {
+      cy.typeIntoField(`[data-cy="upload-file-name-${index}"]`, fileName, {
+        clearBeforeTyping: true,
+      });
     });
     return this;
   }
 
   fillSingleFileName(fileName: string) {
-    cy.get("input").type(fileName);
+    cy.get('[data-cy="upload-file-name-0"]').type(fileName);
     return this;
   }
 
@@ -154,7 +155,11 @@ export class PatientFiles {
   }
 
   clickFileDetailsButton() {
-    cy.get(`[data-cy="file-options-button"]`).first().click({ force: true });
+    cy.get(`[data-cy="file-options-button"]`)
+      .filter(":visible")
+      .first()
+      .should("be.enabled")
+      .click();
     return this;
   }
 
@@ -207,6 +212,8 @@ export class PatientFiles {
     cy.verifyAndClickElement('[data-cy="files-filter-button"]', "Filter");
     cy.verifyAndClickElement('[data-cy="active-files-button"]', "Active Files");
     this.verifyFilterApiCall();
+    cy.verifyContentPresence('[data-cy="file-status-badge"]', ["Active Files"]);
+    cy.wait(1000);
     return this;
   }
 
@@ -216,23 +223,15 @@ export class PatientFiles {
     return this;
   }
 
-  openCamera() {
-    cy.get('[data-cy="open-camera-button"]').click();
-    return this;
-  }
-
-  captureImage() {
-    cy.verifyAndClickElement('[data-cy="capture-button"]', "Capture");
-    return this;
-  }
-
-  clickSubmit() {
-    cy.verifyAndClickElement('[data-cy="capture-submit-button"]', "Submit");
-    return this;
-  }
-
   navigateToSavedUrl() {
     cy.navigateToSavedUrl();
+    return this;
+  }
+
+  clickAddFilesAndSelectUpload() {
+    cy.wrap(this.clickAddFilesButton()).then(() => {
+      this.selectUploadFromDevice();
+    });
     return this;
   }
 }

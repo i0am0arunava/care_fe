@@ -1,13 +1,14 @@
-import { format } from "date-fns";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { LocationHistory } from "@/types/emr/encounter";
+import { DateTimeInput } from "@/components/Common/DateTimeInput";
+
+import { LocationHistory } from "@/types/emr/encounter/encounter";
 import { LocationAssociationStatus } from "@/types/location/association";
 
 import { LocationCard } from "./LocationCard";
@@ -28,7 +29,7 @@ interface LocationCardWrapperProps {
   editingState: EditingState;
   setEditingState: React.Dispatch<React.SetStateAction<EditingState>>;
   handleCancelEdit: () => void;
-  handleConfirmEdit: (location: LocationHistory) => Promise<void>;
+  handleConfirmEdit: (location: LocationHistory) => void;
   isPending: boolean;
   showBackButton?: boolean;
   title?: string;
@@ -65,6 +66,22 @@ export function LocationCardWrapper({
     }
   }, [isEditing, editingState.timeConfig.status]);
 
+  const validateDates = () => {
+    if (!editingState.timeConfig.end) return true;
+
+    if (editingState.timeConfig.end < editingState.timeConfig.start) {
+      toast.error(t("end_time_before_start_error"));
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleConfirm = () => {
+    if (!validateDates()) return;
+    handleConfirmEdit(locationHistory);
+  };
+
   return (
     <div className="space-y-4">
       {showBackButton && (
@@ -92,18 +109,17 @@ export function LocationCardWrapper({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>{t("end_time")}</Label>
-                  <Input
-                    type="datetime-local"
-                    value={format(
-                      editingState.timeConfig.end || new Date(),
-                      "yyyy-MM-dd'T'HH:mm",
-                    )}
-                    onChange={(e) =>
+                  <DateTimeInput
+                    value={
+                      editingState.timeConfig.end?.toISOString() ??
+                      new Date().toISOString()
+                    }
+                    onDateChange={(newISO) =>
                       setEditingState((prev) => ({
                         ...prev,
                         timeConfig: {
                           ...prev.timeConfig,
-                          end: new Date(e.target.value),
+                          end: newISO ? new Date(newISO) : undefined,
                         },
                       }))
                     }
@@ -114,18 +130,14 @@ export function LocationCardWrapper({
               <>
                 <div className="space-y-2">
                   <Label>{t("start_time")}</Label>
-                  <Input
-                    type="datetime-local"
-                    value={format(
-                      editingState.timeConfig.start,
-                      "yyyy-MM-dd'T'HH:mm",
-                    )}
-                    onChange={(e) =>
+                  <DateTimeInput
+                    value={editingState.timeConfig.start?.toISOString()}
+                    onDateChange={(newISO) =>
                       setEditingState((prev) => ({
                         ...prev,
                         timeConfig: {
                           ...prev.timeConfig,
-                          start: new Date(e.target.value),
+                          start: new Date(newISO),
                         },
                       }))
                     }
@@ -135,24 +147,14 @@ export function LocationCardWrapper({
                   editingState.timeConfig.status !== "active" && (
                     <div className="space-y-2">
                       <Label>{t("end_time")}</Label>
-                      <Input
-                        type="datetime-local"
-                        value={
-                          editingState.timeConfig.end
-                            ? format(
-                                editingState.timeConfig.end,
-                                "yyyy-MM-dd'T'HH:mm",
-                              )
-                            : ""
-                        }
-                        onChange={(e) =>
+                      <DateTimeInput
+                        value={editingState.timeConfig.end?.toISOString()}
+                        onDateChange={(newISO) =>
                           setEditingState((prev) => ({
                             ...prev,
                             timeConfig: {
                               ...prev.timeConfig,
-                              end: e.target.value
-                                ? new Date(e.target.value)
-                                : undefined,
+                              end: newISO ? new Date(newISO) : undefined,
                             },
                           }))
                         }
@@ -168,7 +170,7 @@ export function LocationCardWrapper({
               <Button
                 data-cy="location-card-wrapper-save-button"
                 variant="primary"
-                onClick={() => handleConfirmEdit(locationHistory)}
+                onClick={handleConfirm}
                 disabled={isPending}
               >
                 {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}

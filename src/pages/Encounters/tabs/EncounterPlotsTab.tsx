@@ -1,9 +1,7 @@
 import careConfig from "@careConfig";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryParams } from "raviger";
-import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -13,27 +11,25 @@ import {
 } from "@/components/Common/Charts/ObservationChart";
 import Loading from "@/components/Common/Loading";
 
-import useAppHistory from "@/hooks/useAppHistory";
 import useBreakpoints from "@/hooks/useBreakpoints";
 
-import { getPermissions } from "@/common/Permissions";
-
-import { usePermissions } from "@/context/PermissionContext";
-import { EncounterTabProps } from "@/pages/Encounters/EncounterShow";
+import { useEncounter } from "@/pages/Encounters/utils/EncounterProvider";
 
 type QueryParams = {
   plot: ObservationPlotConfig[number]["id"];
 };
 
-export const EncounterPlotsTab = (props: EncounterTabProps) => {
+export const EncounterPlotsTab = () => {
   const { t } = useTranslation();
   const [qParams, setQParams] = useQueryParams<QueryParams>();
-  const { hasPermission } = usePermissions();
-  const { canViewClinicalData, canViewEncounter } = getPermissions(
-    hasPermission,
-    props.encounter.permissions,
-  );
-  const { goBack } = useAppHistory();
+
+  const {
+    patientId,
+    selectedEncounterId: encounterId,
+    patientPermissions: { canViewClinicalData },
+    selectedEncounterPermissions: { canViewEncounter },
+  } = useEncounter();
+
   const canAccess = canViewClinicalData || canViewEncounter;
   const plotColumns = useBreakpoints({ default: 1, lg: 2 });
 
@@ -41,14 +37,6 @@ export const EncounterPlotsTab = (props: EncounterTabProps) => {
     queryKey: ["plots-config"],
     queryFn: () => fetch(careConfig.plotsConfigUrl).then((res) => res.json()),
   });
-
-  useEffect(() => {
-    if (!canAccess) {
-      toast.error("You do not have permission to view this encounter");
-      goBack();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canAccess]);
 
   if (isLoading || !data) {
     return <Loading />;
@@ -65,7 +53,9 @@ export const EncounterPlotsTab = (props: EncounterTabProps) => {
     <div className="mt-2">
       <Tabs
         value={currentTabId}
-        onValueChange={(value) => setQParams({ plot: value })}
+        onValueChange={(value) =>
+          setQParams({ plot: value }, { overwrite: false })
+        }
       >
         <div className="overflow-x-scroll w-full">
           <TabsList>
@@ -80,8 +70,8 @@ export const EncounterPlotsTab = (props: EncounterTabProps) => {
         {data.map((tab) => (
           <TabsContent key={tab.id} value={tab.id}>
             <ObservationVisualizer
-              patientId={props.patient.id}
-              encounterId={props.encounter.id}
+              patientId={patientId}
+              encounterId={encounterId}
               codeGroups={tab.groups}
               gridCols={plotColumns}
               canAccess={canAccess}

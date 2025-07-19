@@ -6,7 +6,7 @@ import { isValidPhoneNumber } from "react-phone-number-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-import SearchByMultipleFields from "@/components/Common/SearchByMultipleFields";
+import SearchInput from "@/components/Common/SearchInput";
 import { CardGridSkeleton } from "@/components/Common/SkeletonLoading";
 import { UserCard } from "@/components/Users/UserListAndCard";
 
@@ -41,14 +41,16 @@ export default function OrganizationUsers({ id, navOrganizationId }: Props) {
     {
       key: "username",
       type: "text" as const,
-      placeholder: "Search by username",
+      placeholder: t("search_by_username"),
       value: qParams.name || "",
+      display: t("username"),
     },
     {
       key: "phone_number",
       type: "phone" as const,
-      placeholder: "Search by phone number",
+      placeholder: t("search_by_phone_number"),
       value: qParams.phone_number || "",
+      display: t("phone_number"),
     },
   ];
 
@@ -144,13 +146,8 @@ export default function OrganizationUsers({ id, navOrganizationId }: Props) {
               </div>
             </div>
             <div className="flex gap-2">
-              <SearchByMultipleFields
-                id="user-search"
+              <SearchInput
                 options={searchOptions}
-                initialOptionIndex={Math.max(
-                  searchOptions.findIndex((option) => option.value !== ""),
-                  0,
-                )}
                 onSearch={handleSearch}
                 onFieldChange={handleFieldChange}
                 className="w-full"

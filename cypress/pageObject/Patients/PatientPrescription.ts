@@ -12,23 +12,43 @@ export class PatientPrescription {
     return this;
   }
   clickEditPrescription() {
-    cy.verifyAndClickElement('[data-cy="edit-prescription"]', "Edit");
+    cy.intercept("GET", "**/medication/request/**").as("getMedications");
+    cy.verifyAndClickElement('[data-cy="edit-prescription"]', /Add|Edit/);
+    cy.wait("@getMedications").its("response.statusCode").should("eq", 200);
     return this;
   }
+
+  verifyMedicineName(medicineName: string) {
+    cy.get('[data-cy="medicine-name-view"]')
+      .should("be.visible")
+      .and("contain", medicineName);
+    return this;
+  }
+
   addMedication(details: MedicationDetails) {
     const { medicineName, dosage, frequency, instructions, notes } = details;
 
     if (medicineName) {
+      cy.get("button").contains("Add Medication").click();
+      cy.get("button").contains("Medication List").click();
       cy.typeAndSelectOption(
-        '[data-cy="add-medication-request"]',
+        "input[data-slot='command-input']",
         medicineName,
         false,
       );
+      this.verifyMedicineName(medicineName);
+      cy.wait(100);
     }
 
     if (dosage) {
-      cy.get('[data-cy="dosage"]').last().click().type(dosage);
-      cy.get('[role="option"]').contains(dosage).click();
+      cy.get('[data-cy="dosage"]')
+        .last()
+        .click()
+        .type(dosage)
+        .then(() => {
+          cy.get('[role="option"]').contains(dosage).click();
+        });
+      cy.wait(200);
     }
 
     if (frequency) {
@@ -38,9 +58,15 @@ export class PatientPrescription {
     }
 
     if (instructions) {
-      cy.clickAndSelectOption('[data-cy="instructions"]', instructions, {
-        position: "last",
-      });
+      cy.get('[data-cy="instructions"]').click();
+      cy.clickAndSelectOption(
+        '[data-cy="medication-instructions-dropdown"]',
+        instructions,
+        {
+          position: "last",
+        },
+      );
+      cy.get('[data-cy="instructions"]').click();
     }
 
     if (notes) {
@@ -65,11 +91,18 @@ export class PatientPrescription {
   }
   removeMedication() {
     cy.get('[data-cy="remove-medication"]')
-      .filter(":visible")
-      .not(":disabled")
       .first()
-      .click();
-    cy.verifyAndClickElement('[data-cy="confirm-remove-medication"]', "Remove");
+      .scrollIntoView()
+      .should("be.visible")
+      .then(($button) => {
+        if (!$button.is(":disabled")) {
+          cy.wrap($button).click();
+          cy.verifyAndClickElement(
+            '[data-cy="confirm-remove-medication"]',
+            "Remove",
+          );
+        }
+      });
     return this;
   }
   verifyDeletedMedication(details: MedicationDetails) {

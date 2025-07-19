@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/card";
 
 import { LoginHeader } from "@/components/Common/LoginHeader";
-import SearchByMultipleFields from "@/components/Common/SearchByMultipleFields";
+import SearchInput from "@/components/Common/SearchInput";
 import { CardGridSkeleton } from "@/components/Common/SkeletonLoading";
 
 import useFilters from "@/hooks/useFilters";
@@ -15,9 +15,7 @@ import useFilters from "@/hooks/useFilters";
 import { RESULTS_PER_PAGE_LIMIT } from "@/common/constants";
 
 import query from "@/Utils/request/query";
-import { PaginatedResponse } from "@/Utils/request/types";
 import OrganizationFilter from "@/pages/Organization/components/OrganizationFilter";
-import { FacilityData } from "@/types/facility/facility";
 import facilityApi from "@/types/facility/facilityApi";
 
 import { FacilityCard } from "./components/FacilityCard";
@@ -41,9 +39,7 @@ export function FacilitiesPage() {
     }
   }, [selectedOrg]);
 
-  const { data: facilitiesResponse, isLoading } = useQuery<
-    PaginatedResponse<FacilityData>
-  >({
+  const { data: facilitiesResponse, isLoading } = useQuery({
     queryKey: ["facilities", qParams],
     queryFn: query.debounced(facilityApi.getAllFacilities, {
       queryParams: {
@@ -87,20 +83,19 @@ export function FacilitiesPage() {
           }}
           className="flex flex-row w-full"
         />
-        <SearchByMultipleFields
+        <SearchInput
           id="facility-search"
           options={[
             {
-              key: "facility_search_placeholder_text",
-              type: "text" as const,
-              placeholder: t("facility_search_placeholder_text"),
+              key: "name",
+              type: "text",
+              placeholder: t("search_by_facility_name"),
               value: qParams.name || "",
+              display: t("name"),
             },
           ]}
-          initialOptionIndex={0}
           className="w-[calc(100vw-2rem)] sm:max-w-min sm:min-w-64"
           onSearch={(key, value) => updateQuery({ name: value })}
-          enableOptionButtons={false}
         />
       </div>
 

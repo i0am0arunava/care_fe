@@ -15,8 +15,11 @@ import {
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 
+import { TagSelectorPopover } from "@/components/Tags/TagAssignmentSheet";
+
 import { AppointmentSlotPicker } from "@/pages/Appointments/components/AppointmentSlotPicker";
 import { PractitionerSelector } from "@/pages/Appointments/components/PractitionerSelector";
+import { TagConfig, TagResource } from "@/types/emr/tagConfig/tagConfig";
 import { QuestionValidationError } from "@/types/questionnaire/batch";
 import {
   QuestionnaireResponse,
@@ -33,8 +36,6 @@ import {
   TokenSlot,
 } from "@/types/scheduling/schedule";
 import { UserBase } from "@/types/user/user";
-
-import { FieldError } from "./FieldError";
 
 interface AppointmentQuestionProps {
   question: Question;
@@ -53,13 +54,13 @@ const APPOINTMENT_FIELDS: FieldDefinitions = {
   REASON: {
     key: "reason_for_visit",
     required: true,
-    validate: (value: unknown) => {
-      const str = value as string;
-      return !!str?.trim();
-    },
   },
   SLOT: {
     key: "slot_id",
+    required: true,
+  },
+  TAGS: {
+    key: "tags",
     required: true,
   },
 } as const;
@@ -67,8 +68,22 @@ const APPOINTMENT_FIELDS: FieldDefinitions = {
 export function validateAppointmentQuestion(
   value: CreateAppointmentQuestion,
   questionId: string,
+  required: boolean,
 ): QuestionValidationError[] {
-  return validateFields(value, questionId, APPOINTMENT_FIELDS);
+  return validateFields(value, questionId, {
+    REASON: {
+      ...APPOINTMENT_FIELDS.REASON,
+      required: required || value?.slot_id !== undefined,
+    },
+    SLOT: {
+      ...APPOINTMENT_FIELDS.SLOT,
+      required: required || value?.reason_for_visit !== undefined,
+    },
+    TAGS: {
+      ...APPOINTMENT_FIELDS.TAGS,
+      required: required,
+    },
+  });
 }
 
 export function AppointmentQuestion({
@@ -82,6 +97,7 @@ export function AppointmentQuestion({
   const { t } = useTranslation();
   const [resource, setResource] = useState<UserBase>();
   const [open, setOpen] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<TagConfig[]>([]);
   const { hasError } = useFieldError(question.id, errors);
 
   const values =
@@ -90,11 +106,24 @@ export function AppointmentQuestion({
   const value = values[0] ?? {};
 
   const handleUpdate = (updates: Partial<CreateAppointmentQuestion>) => {
-    updateQuestionnaireResponseCB(
-      [{ type: "appointment", value: [{ ...value, ...updates }] }],
-      questionnaireResponse.question_id,
-      questionnaireResponse.note,
-    );
+    const updatedValue = { ...value, ...updates };
+    if (
+      !updatedValue.reason_for_visit?.trim() &&
+      !updatedValue.slot_id &&
+      !updatedValue.tags?.length
+    ) {
+      updateQuestionnaireResponseCB(
+        [],
+        questionnaireResponse.question_id,
+        questionnaireResponse.note,
+      );
+    } else {
+      updateQuestionnaireResponseCB(
+        [{ type: "appointment", value: [updatedValue] }],
+        questionnaireResponse.question_id,
+        questionnaireResponse.note,
+      );
+    }
   };
 
   // Query to get slot details for display
@@ -112,30 +141,43 @@ export function AppointmentQuestion({
   return (
     <div className="space-y-4">
       <div>
+        <div className="mb-4 mt-2">
+          <Label className="mb-2">{t("tags")}</Label>
+          <TagSelectorPopover
+            selected={selectedTags}
+            onChange={(tags) => {
+              setSelectedTags(tags);
+              handleUpdate({ tags: tags.map((tag) => tag.id) });
+            }}
+            resource={TagResource.APPOINTMENT}
+            className={cn(
+              hasError(APPOINTMENT_FIELDS.TAGS.key) && "ring-1 ring-red-500",
+            )}
+          />
+        </div>
         <Label className="mb-2">
           {t("reason_for_visit")}
-          <span className="text-red-500 ml-0.5">*</span>
+          {question.required && <span className="text-red-500 ml-0.5">*</span>}
         </Label>
         <Textarea
           placeholder={t("reason_for_visit_placeholder")}
           value={value.reason_for_visit || ""}
-          onChange={(e) => handleUpdate({ reason_for_visit: e.target.value })}
+          onChange={(e) =>
+            handleUpdate({
+              reason_for_visit: e.target.value || undefined,
+            })
+          }
           disabled={disabled}
           className={cn(
             hasError(APPOINTMENT_FIELDS.REASON.key) && "border-red-500",
           )}
-        />
-        <FieldError
-          fieldKey={APPOINTMENT_FIELDS.REASON.key}
-          questionId={question.id}
-          errors={errors}
         />
       </div>
 
       <div>
         <Label className="block mb-2">
           {t("select_practitioner")}
-          <span className="text-red-500 ml-0.5">*</span>
+          {question.required && <span className="text-red-500 ml-0.5">*</span>}
         </Label>
         <div
           className={cn(
@@ -163,7 +205,7 @@ export function AppointmentQuestion({
       <div>
         <Label className="block mb-2">
           {t("appointment_slot")}
-          <span className="text-red-500 ml-0.5">*</span>
+          {question.required && <span className="text-red-500 ml-0.5">*</span>}
         </Label>
         <div
           className={cn(
@@ -228,11 +270,6 @@ export function AppointmentQuestion({
               </div>
             </SheetContent>
           </Sheet>
-          <FieldError
-            fieldKey={APPOINTMENT_FIELDS.SLOT.key}
-            questionId={question.id}
-            errors={errors}
-          />
         </div>
       </div>
     </div>

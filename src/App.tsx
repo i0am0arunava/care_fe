@@ -5,7 +5,8 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { Suspense } from "react";
+import { useLocationChange } from "raviger";
+import { Suspense, useEffect } from "react";
 
 import { Toaster } from "@/components/ui/sonner";
 
@@ -16,6 +17,7 @@ import PluginEngine from "@/PluginEngine";
 import AuthUserProvider from "@/Providers/AuthUserProvider";
 import HistoryAPIProvider from "@/Providers/HistoryAPIProvider";
 import Routers from "@/Routers";
+import { displayCareConsoleArt } from "@/Utils/consoleArt";
 import { handleHttpError } from "@/Utils/request/errorHandler";
 import { HTTPError } from "@/Utils/request/types";
 
@@ -45,10 +47,23 @@ const queryClient = new QueryClient({
   }),
 });
 
+const ScrollToTop = () => {
+  useLocationChange(() => {
+    window.scrollTo(0, 0);
+  });
+
+  return null;
+};
+
 const App = () => {
+  useEffect(() => {
+    displayCareConsoleArt();
+  }, []);
+
   return (
     <>
       <QueryClientProvider client={queryClient}>
+        <ScrollToTop />
         <Suspense fallback={<Loading />}>
           <PubSubProvider>
             <PluginEngine>

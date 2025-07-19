@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -28,7 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import routes from "@/Utils/request/api";
 import mutate from "@/Utils/request/mutate";
 import query from "@/Utils/request/query";
-import { Encounter, LocationHistory } from "@/types/emr/encounter";
+import { Encounter, LocationHistory } from "@/types/emr/encounter/encounter";
 import { LocationAssociationStatus } from "@/types/location/association";
 import { LocationList } from "@/types/location/location";
 import locationApi from "@/types/location/locationApi";
@@ -88,8 +90,15 @@ export function LocationSheet({
   const [searchTerm, setSearchTerm] = useState("");
   const [locationsPage, setLocationsPage] = useState(1);
   const [bedsPage, setBedsPage] = useState(1);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [locationToDelete, setLocationToDelete] = useState<{
+    location: string;
+    id: string;
+  } | null>(null);
   const [hasMoreLocations, setHasMoreLocations] = useState(true);
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
   const [hasMoreBeds, setHasMoreBeds] = useState(true);
+  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const initialState = {
@@ -151,7 +160,7 @@ export function LocationSheet({
         queryParams: {
           limit: ITEMS_PER_PAGE,
           offset: (locationsPage - 1) * ITEMS_PER_PAGE,
-          search: searchTerm,
+          name: searchTerm,
           mode: "kind",
           parent: selectedLocation?.id,
           ...(!selectedLocation ? { mine: true } : {}),
@@ -169,6 +178,7 @@ export function LocationSheet({
       selectedLocation?.id,
       bedsPage,
       showAvailableOnly,
+      searchTerm,
     ],
     queryFn: async ({ signal }) => {
       const response = await query(locationApi.list, {
@@ -177,6 +187,7 @@ export function LocationSheet({
           limit: ITEMS_PER_PAGE,
           offset: (bedsPage - 1) * ITEMS_PER_PAGE,
           mode: "instance",
+          name: searchTerm,
           parent: selectedLocation?.id,
           available: showAvailableOnly ? "true" : undefined,
           ...(!selectedLocation ? { mine: true } : {}),
@@ -185,10 +196,11 @@ export function LocationSheet({
       })({ signal });
       return response;
     },
+    enabled: !!selectedLocation && !!facilityId,
   });
 
   useEffect(() => {
-    if (locationsData) {
+    if (locationsData && open) {
       if (locationsPage === 1) {
         setAllLocations(locationsData.results);
       } else {
@@ -196,7 +208,7 @@ export function LocationSheet({
       }
       setHasMoreLocations(locationsData.count > locationsPage * ITEMS_PER_PAGE);
     }
-  }, [locationsData, locationsPage]);
+  }, [locationsData, locationsPage, open]);
 
   useEffect(() => {
     if (bedsData) {
@@ -207,6 +219,7 @@ export function LocationSheet({
       }
       setHasMoreBeds(bedsData.count > bedsPage * ITEMS_PER_PAGE);
     }
+    setSelectedBed(null);
   }, [bedsData, bedsPage]);
 
   const handleLocationClick = (location: LocationList) => {
@@ -347,23 +360,61 @@ export function LocationSheet({
       timeConfig,
     });
   };
+  const { mutate: unlinkLocation } = useMutation({
+    mutationFn: ({ location, id }: { location: string; id: string }) => {
+      return mutate(locationApi.deleteAssociation, {
+        pathParams: {
+          facility_external_id: facilityId,
+          location_external_id: location,
+          external_id: id,
+        },
+      })({ encounter: encounter.id, status: "completed" });
+    },
+    onSuccess: () => {
+      if (locationStatus === "active") {
+        toast.success(t("bed_active_removed_due_to_error"));
+      } else {
+        toast.success(t("bed_planned_cancelled"));
+      }
+      queryClient.invalidateQueries({ queryKey: ["encounter", encounter.id] });
+    },
+    onError: () => {
+      toast.error(t("error_removing_bed_assignment"));
+    },
+  });
+  const handleCancelPlan = (status: "active" | "planned") => {
+    const { activeLocation, plannedLocations } = getCurrentLocations();
+    const locationToCancel =
+      status === "active" ? activeLocation : plannedLocations[0];
 
-  const handleCancelPlan = () => {
-    const currentLocation = getCurrentLocations().plannedLocations[0];
-    if (!currentLocation) return;
+    if (!locationToCancel) return;
 
+    setLocationToDelete({
+      location: locationToCancel.location.id,
+      id: locationToCancel.id,
+    });
+    setLocationStatus(status);
+    setShowDeleteDialog(true);
     setSheetState((prev) => ({
       ...prev,
-      screen: "modify",
-      action: "cancel",
+      screen: "assign",
+      action: "new",
       timeConfig: {
-        start: new Date(currentLocation.start_datetime),
+        start: new Date(locationToCancel.start_datetime),
         end: new Date(),
         status: "completed",
       },
     }));
   };
-
+  const confirmDeletePlan = () => {
+    if (!locationToDelete) return;
+    unlinkLocation({
+      location: locationToDelete.location,
+      id: locationToDelete.id,
+    });
+    setShowDeleteDialog(false);
+    setLocationToDelete(null);
+  };
   const handleConfirmTime = async () => {
     const requests = [];
     const { activeLocation, plannedLocations } = getCurrentLocations();
@@ -543,7 +594,11 @@ export function LocationSheet({
                 status === "active" ? handleCompleteBedStay : undefined
               }
               onUpdateTime={handleUpdateTime}
-              onCancel={status === "planned" ? handleCancelPlan : undefined}
+              onCancel={() =>
+                status === "active" || status === "planned"
+                  ? handleCancelPlan(status)
+                  : undefined
+              }
               onAssignNow={status === "planned" ? handleAssignNow : undefined}
             />
           </div>
@@ -643,6 +698,7 @@ export function LocationSheet({
               >
                 <Button
                   variant="outline"
+                  disabled={!selectedBed}
                   onClick={() => {
                     setSheetState((prev) => ({
                       ...prev,
@@ -692,7 +748,7 @@ export function LocationSheet({
   };
 
   const { mutate: executeBatch, isPending } = useMutation({
-    mutationFn: mutate(routes.batchRequest),
+    mutationFn: mutate(routes.batchRequest, { silent: true }),
     onSuccess: () => {
       toast.success(t("bed_assigned_successfully"));
       resetStates();
@@ -701,8 +757,9 @@ export function LocationSheet({
       });
     },
     onError: (error) => {
+      // Type cast to access the results property safely
       const errorData = error.cause as {
-        results: Array<{
+        results?: Array<{
           reference_id: string;
           status_code: number;
           data: {
@@ -712,27 +769,51 @@ export function LocationSheet({
               type?: string;
               loc?: string[];
             }>;
+            non_field_errors?: string[];
+            detail?: string;
           };
         }>;
       };
 
       if (errorData?.results) {
+        // Filter results for error status codes
         const failedResults = errorData.results.filter(
           (result) => result.status_code !== 200,
         );
 
+        // Process each failed result to extract error messages
+        let errorDisplayed = false;
         failedResults.forEach((result) => {
           const errors = result.data?.errors || [];
+          const nonFieldErrors = result.data?.non_field_errors || [];
+          const detailError = result.data?.detail;
+
+          // Display each error message
           errors.forEach((error) => {
             const message = error.msg || error.error || t("validation_failed");
             toast.error(message);
+            errorDisplayed = true;
           });
+
+          // Display non-field errors
+          nonFieldErrors.forEach((message) => {
+            toast.error(message);
+            errorDisplayed = true;
+          });
+
+          // Display detail error if present
+          if (detailError) {
+            toast.error(detailError);
+            errorDisplayed = true;
+          }
         });
 
-        if (failedResults.length === 0) {
+        // If no specific errors were found but we still had failures
+        if (failedResults.length > 0 && !errorDisplayed) {
           toast.error(t("error_updating_location"));
         }
       } else {
+        // Generic error if we couldn't parse the error response
         toast.error(t("error_updating_location"));
       }
     },
@@ -770,6 +851,7 @@ export function LocationSheet({
     <>
       <Sheet
         onOpenChange={(open) => {
+          setOpen(open);
           // Reset states when closing the sheet
           if (!open) {
             resetStates();
@@ -801,13 +883,13 @@ export function LocationSheet({
             </TabsList>
 
             <TabsContent value="assign" className="mt-2">
-              <ScrollArea className="h-[calc(100vh-8rem)]">
+              <ScrollArea className="h-[calc(100vh-13rem)] md:h-[calc(100vh-8rem)] p-3 md:p-4">
                 {renderScreen()}
               </ScrollArea>
             </TabsContent>
 
             <TabsContent value="history" className="mt-2">
-              <ScrollArea className="h-[calc(100vh-8rem)]">
+              <ScrollArea className="h-[calc(100vh-13rem)] md:h-[calc(100vh-8rem)]">
                 <LocationHistoryComponent history={history} />
               </ScrollArea>
             </TabsContent>
@@ -837,6 +919,34 @@ export function LocationSheet({
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleDischargeConfirm}>
               {t("proceed")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {locationStatus === "active"
+                ? t("are_you_sure_mark_as_error_active_bed")
+                : t("are_you_sure_cancel_planned_bed")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowDeleteDialog(false);
+                setLocationToDelete(null);
+              }}
+            >
+              {t("cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className={cn(buttonVariants({ variant: "destructive" }))}
+              onClick={confirmDeletePlan}
+            >
+              {t("confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -60,7 +60,6 @@ export default function FacilityForm({
   const queryClient = useQueryClient();
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [selectedLevels, setSelectedLevels] = useState<Organization[]>([]);
-  const geoOrganizationRef = useRef<HTMLDivElement>(null);
 
   const facilityFormSchema = z.object({
     facility_type: z.string().min(1, t("facility_type_required")),
@@ -78,7 +77,7 @@ export default function FacilityForm({
 
   type FacilityFormValues = z.infer<typeof facilityFormSchema>;
 
-  const form = useForm<FacilityFormValues>({
+  const form = useForm({
     resolver: zodResolver(facilityFormSchema),
     defaultValues: {
       facility_type: "",
@@ -91,7 +90,7 @@ export default function FacilityForm({
       phone_number: "",
       latitude: undefined,
       longitude: undefined,
-      is_public: false,
+      is_public: true,
     },
   });
 
@@ -160,16 +159,6 @@ export default function FacilityForm({
     }
   };
 
-  const handleSubmit = form.handleSubmit(onSubmit, (errors) => {
-    // Show generic error toast for any validation error
-    toast.error(t("please_fill_all_required_fields"));
-
-    // Scroll to geo-organization field if it has an error
-    if (errors.geo_organization) {
-      geoOrganizationRef.current?.scrollIntoView({ block: "center" });
-    }
-  });
-
   const handleFeatureChange = (value: string[]) => {
     const features = value.map((val) => Number(val));
     form.setValue("features", features, { shouldDirty: true });
@@ -230,20 +219,24 @@ export default function FacilityForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         {/* Basic Information */}
         <div className="space-y-4 rounded-lg border border-gray-200 p-4">
           <h3 className="text-lg font-medium">{t("basic_info")}</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 items-start">
             <FormField
               control={form.control}
               name="facility_type"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className="max-w-full">
                   <FormLabel aria-required>{t("facility_type")}</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <SelectTrigger data-cy="facility-type">
+                      <SelectTrigger
+                        data-cy="facility-type"
+                        className="max-w-full truncate"
+                        ref={field.ref}
+                      >
                         <SelectValue placeholder={t("select_facility_type")} />
                       </SelectTrigger>
                     </FormControl>
@@ -314,7 +307,7 @@ export default function FacilityForm({
                         icon: obj.icon,
                       }))}
                       onValueChange={handleFeatureChange}
-                      value={field.value.map((val) => val.toString())}
+                      value={field.value?.map((val) => val.toString()) || []}
                       placeholder={t("select_facility_feature")}
                       id="facility-features"
                     />
@@ -329,7 +322,7 @@ export default function FacilityForm({
         {/* Contact Information */}
         <div className="space-y-4 rounded-lg border border-gray-200 p-4">
           <h3 className="text-lg font-medium">{t("contact_info")}</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 items-start">
             <FormField
               control={form.control}
               name="phone_number"
@@ -371,7 +364,7 @@ export default function FacilityForm({
               name="geo_organization"
               control={form.control}
               render={({ field }) => (
-                <FormItem className="md:col-span-2" ref={geoOrganizationRef}>
+                <FormItem className="md:col-span-2">
                   <FormControl>
                     <div className="grid-cols-1 grid md:grid-cols-2 gap-5">
                       <GovtOrganizationSelector
@@ -433,7 +426,7 @@ export default function FacilityForm({
             control={form.control}
             name="is_public"
             render={({ field }) => (
-              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-gray-200 p-4 bg-muted/5">
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-gray-200 p-4">
                 <FormControl>
                   <Checkbox
                     checked={field.value}

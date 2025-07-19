@@ -1,8 +1,10 @@
-import { MinusCircledIcon, Pencil2Icon } from "@radix-ui/react-icons";
+import { MinusCircledIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
 import { t } from "i18next";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 
@@ -17,12 +19,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,17 +40,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TooltipComponent } from "@/components/ui/tooltip";
 
 import { ComboboxQuantityInput } from "@/components/Common/ComboboxQuantityInput";
-import { MultiValueSetSelect } from "@/components/Medicine/MultiValueSetSelect";
+import { DateTimeInput } from "@/components/Common/DateTimeInput";
+import { HistoricalRecordSelector } from "@/components/HistoricalRecordSelector";
+import InstructionsPopover from "@/components/Medicine/InstructionsPopover";
+import { getFrequencyDisplay } from "@/components/Medicine/MedicationsTable";
+import { formatDosage } from "@/components/Medicine/utils";
+import { EntitySelectionSheet } from "@/components/Questionnaire/EntitySelectionSheet";
+import MedicationValueSetSelect from "@/components/Questionnaire/MedicationValueSetSelect";
 import { FieldError } from "@/components/Questionnaire/QuestionTypes/FieldError";
-import { NotesInput } from "@/components/Questionnaire/QuestionTypes/NotesInput";
 import ValueSetSelect from "@/components/Questionnaire/ValueSetSelect";
 
 import useBreakpoints from "@/hooks/useBreakpoints";
 
 import query from "@/Utils/request/query";
+import { formatName } from "@/Utils/utils";
+import { useCurrentFacilitySilently } from "@/pages/Facility/utils/useCurrentFacility";
+import { Code } from "@/types/base/code/code";
 import {
   DoseRange,
   INACTIVE_MEDICATION_STATUSES,
@@ -57,18 +66,31 @@ import {
   MedicationRequest,
   MedicationRequestDosageInstruction,
   MedicationRequestIntent,
+  MedicationRequestRead,
   UCUM_TIME_UNITS,
+  displayMedicationName,
   parseMedicationStringToRequest,
-} from "@/types/emr/medicationRequest";
+} from "@/types/emr/medicationRequest/medicationRequest";
 import medicationRequestApi from "@/types/emr/medicationRequest/medicationRequestApi";
+import { MedicationStatementRead } from "@/types/emr/medicationStatement";
+import medicationStatementApi from "@/types/emr/medicationStatement/medicationStatementApi";
+import { ProductKnowledgeBase } from "@/types/inventory/productKnowledge/productKnowledge";
 import { QuestionValidationError } from "@/types/questionnaire/batch";
-import { Code } from "@/types/questionnaire/code";
 import {
   QuestionnaireResponse,
   ResponseValue,
 } from "@/types/questionnaire/form";
 import { useFieldError } from "@/types/questionnaire/validation";
 import { validateFields } from "@/types/questionnaire/validation";
+
+function formatDoseRange(range?: DoseRange): string {
+  if (!range?.high?.value) return "";
+
+  const formatValue = (value: number) =>
+    value.toString().includes(".") ? value.toFixed(2) : value.toString();
+
+  return `${formatValue(range.low?.value)} → ${formatValue(range.high?.value)} ${range.high?.unit?.display}`;
+}
 
 interface MedicationRequestQuestionProps {
   patientId: string;
@@ -181,18 +203,19 @@ export function MedicationRequestQuestion({
   errors,
 }: MedicationRequestQuestionProps) {
   const { t } = useTranslation();
-
+  const { facilityId } = useCurrentFacilitySilently();
   const isPreview = patientId === "preview";
   const medications =
     (questionnaireResponse.values?.[0]?.value as MedicationRequest[]) || [];
 
   const { data: patientMedications } = useQuery({
-    queryKey: ["medication_requests", patientId],
+    queryKey: ["medication_requests", patientId, encounterId],
     queryFn: query(medicationRequestApi.list, {
       pathParams: { patientId },
       queryParams: {
         encounter: encounterId,
         limit: 100,
+        facility: facilityId,
       },
     }),
     enabled: !isPreview,
@@ -201,7 +224,16 @@ export function MedicationRequestQuestion({
   useEffect(() => {
     if (patientMedications?.results) {
       updateQuestionnaireResponseCB(
-        [{ type: "medication_request", value: patientMedications.results }],
+        [
+          {
+            type: "medication_request",
+            value: patientMedications.results.map((medication) => ({
+              ...medication,
+              requested_product_internal: medication.requested_product,
+              requested_product: medication.requested_product?.id,
+            })),
+          },
+        ],
         questionnaireResponse.question_id,
       );
     }
@@ -216,19 +248,92 @@ export function MedicationRequestQuestion({
   );
   const desktopLayout = useBreakpoints({ lg: true, default: false });
 
+  const [newMedicationInSheet, setNewMedicationInSheet] =
+    useState<MedicationRequest | null>(null);
+
   const handleAddMedication = (medication: Code) => {
-    const newMedications: MedicationRequest[] = [
-      ...medications,
-      {
-        ...parseMedicationStringToRequest(medication),
-        authored_on: new Date().toISOString(),
-      },
-    ];
+    const initialDetails = {
+      ...parseMedicationStringToRequest(medication),
+      authored_on: new Date().toISOString(),
+    };
+
+    if (desktopLayout) {
+      addNewMedication(initialDetails);
+    } else {
+      setNewMedicationInSheet(initialDetails);
+    }
+  };
+
+  const handleAddProductMedication = (
+    productKnowledge: ProductKnowledgeBase,
+  ) => {
+    const initialDetails = {
+      ...parseMedicationStringToRequest(undefined, productKnowledge),
+    };
+
+    if (desktopLayout) {
+      addNewMedication(initialDetails);
+    } else {
+      setNewMedicationInSheet(initialDetails);
+    }
+  };
+
+  const addNewMedication = (medication: MedicationRequest) => {
+    const newMedications: MedicationRequest[] = [...medications, medication];
+
     updateQuestionnaireResponseCB(
       [{ type: "medication_request", value: newMedications }],
       questionnaireResponse.question_id,
     );
+
     setExpandedMedicationIndex(newMedications.length - 1);
+    setNewMedicationInSheet(null);
+  };
+
+  const handleConfirmMedicationInSheet = () => {
+    if (!newMedicationInSheet) return;
+    addNewMedication(newMedicationInSheet);
+  };
+
+  const handleAddHistoricalMedications = (
+    selected: (MedicationRequestRead | MedicationStatementRead)[],
+  ) => {
+    // Filter and convert MedicationStatement to MedicationRequest if needed
+    const medicationRequests = selected.map((record) => {
+      if ("dosage_instruction" in record) {
+        const {
+          id: _id,
+          requested_product,
+          ...request
+        } = record as MedicationRequestRead;
+        return {
+          ...request,
+          requested_product: requested_product?.id,
+          requested_product_internal: requested_product,
+        };
+      } else {
+        const statement = record as MedicationStatementRead;
+        return {
+          ...parseMedicationStringToRequest(statement.medication),
+          authored_on: new Date().toISOString(),
+          note: statement.note,
+        } as MedicationRequest;
+      }
+    });
+    const newMedications: MedicationRequest[] = [
+      ...medications,
+      ...medicationRequests,
+    ];
+    updateQuestionnaireResponseCB(
+      [
+        {
+          type: "medication_request",
+          value: newMedications,
+        },
+      ],
+      questionnaireResponse.question_id,
+    );
+    setExpandedMedicationIndex(medications.length);
   };
 
   const handleRemoveMedication = (index: number) => {
@@ -277,8 +382,40 @@ export function MedicationRequestQuestion({
     );
   };
 
+  const newMedicationSheetContent = (
+    <div className="space-y-4 p-3">
+      {newMedicationInSheet && (
+        <MedicationRequestGridRow
+          medication={newMedicationInSheet}
+          disabled={disabled}
+          onUpdate={(updates) => {
+            if (newMedicationInSheet) {
+              setNewMedicationInSheet({
+                ...newMedicationInSheet,
+                ...updates,
+              });
+            }
+          }}
+          onRemove={() => {}}
+          index={-1}
+          questionId={questionnaireResponse.question_id}
+          errors={errors}
+        />
+      )}
+    </div>
+  );
+
+  const addMedicationPlaceholder = t("add_medication", {
+    count: medications.length + 1,
+  });
+
   return (
-    <div className="space-y-4">
+    <div
+      className={cn(
+        "space-y-4",
+        medications.length > 0 ? "md:max-w-fit" : "max-w-4xl",
+      )}
+    >
       <AlertDialog
         open={medicationToDelete !== null}
         onOpenChange={(open) => !open && setMedicationToDelete(null)}
@@ -288,8 +425,9 @@ export function MedicationRequestQuestion({
             <AlertDialogTitle>{t("remove_medication")}</AlertDialogTitle>
             <AlertDialogDescription>
               {t("remove_medication_confirmation", {
-                medication:
-                  medications[medicationToDelete!]?.medication?.display,
+                medication: displayMedicationName(
+                  medications[medicationToDelete!],
+                ),
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -305,20 +443,127 @@ export function MedicationRequestQuestion({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <HistoricalRecordSelector<MedicationRequestRead | MedicationStatementRead>
+        title={t("medication_history")}
+        structuredTypes={[
+          {
+            type: t("past_prescriptions"),
+            displayFields: [
+              {
+                key: "",
+                label: t("medicine"),
+                render: (med) => displayMedicationName(med),
+              },
+              {
+                key: "dosage_instruction",
+                label: t("dosage"),
+                render: (instructions) => {
+                  const dosage = formatDosage(instructions[0]) || "";
 
+                  const frequency =
+                    getFrequencyDisplay(instructions[0]?.timing)?.meaning || "";
+
+                  const duration = instructions?.[0]?.timing?.repeat
+                    ?.bounds_duration
+                    ? `${instructions[0].timing.repeat.bounds_duration.value} ${instructions[0].timing.repeat.bounds_duration.unit}`
+                    : "";
+
+                  return `${dosage}\n${frequency}\n${duration}`;
+                },
+              },
+              {
+                key: "dosage_instruction",
+                label: t("instructions"),
+                render: (instructions) =>
+                  instructions?.[0]?.additional_instruction?.[0]?.display,
+              },
+              {
+                key: "note",
+                label: t("notes"),
+                render: (note) => note,
+              },
+              {
+                key: "created_by",
+                label: t("prescribed_by"),
+                render: (created_by) => formatName(created_by),
+              },
+            ],
+            queryKey: ["medication_requests", patientId],
+            queryFn: async (limit: number, offset: number) => {
+              const response = await query(medicationRequestApi.list, {
+                pathParams: { patientId },
+                queryParams: {
+                  limit,
+                  offset,
+                  status:
+                    "active,on_hold,draft,unknown,ended,completed,cancelled",
+                  ordering: "-created_date",
+                },
+              })({ signal: new AbortController().signal });
+              return response;
+            },
+          },
+          {
+            type: t("medication_statements"),
+            displayFields: [
+              {
+                key: "medication",
+                label: t("medicine"),
+                render: (med) => med?.display,
+              },
+              {
+                key: "dosage_text",
+                label: t("dosage"),
+                render: (dosage) => dosage,
+              },
+              {
+                key: "status",
+                label: t("status"),
+                render: (status) => t(status),
+              },
+              {
+                key: "note",
+                label: t("notes"),
+                render: (note) => note || "-",
+              },
+              {
+                key: "created_by",
+                label: t("prescribed_by"),
+                render: (created_by) => formatName(created_by),
+              },
+            ],
+            queryKey: ["medication_statements", patientId],
+            queryFn: async (limit: number, offset: number) => {
+              const response = await query(medicationStatementApi.list, {
+                pathParams: { patientId },
+                queryParams: {
+                  limit,
+                  offset,
+                  status:
+                    "active,on_hold,completed,stopped,unknown,not_taken,intended",
+                  ordering: "-created_date",
+                },
+              })({ signal: new AbortController().signal });
+              return response;
+            },
+          },
+        ]}
+        buttonLabel={t("medication_history")}
+        onAddSelected={handleAddHistoricalMedications}
+      />
       {medications.length > 0 && (
-        <div className="md:overflow-x-auto w-auto pb-2">
+        <div className="md:overflow-x-auto w-auto">
           <div className="min-w-fit">
             <div
               className={cn(
-                "max-w-[2304px] relative lg:border border-gray-200 rounded-md",
+                "max-w-[2344px] relative lg:border border-gray-200 rounded-md",
                 {
                   "bg-gray-50/50": !desktopLayout,
                 },
               )}
             >
               {/* Header - Only show on desktop */}
-              <div className="hidden lg:grid grid-cols-[280px_180px_170px_160px_300px_180px_250px_180px_160px_200px_180px_48px] bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-500">
+              <div className="hidden lg:grid grid-cols-[280px_220px_180px_160px_300px_180px_250px_180px_160px_220px_180px_48px] bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-500">
                 <div className="font-semibold text-gray-600 p-3 border-r border-gray-200">
                   {t("medicine")}
                 </div>
@@ -352,7 +597,7 @@ export function MedicationRequestQuestion({
                   {t("authored_on")}
                 </div>
                 <div className="font-semibold text-gray-600 p-3 border-r border-gray-200">
-                  {t("notes")}
+                  {t("note")}
                 </div>
                 <div className="font-semibold text-gray-600 p-3 sticky right-0 bg-gray-50 shadow-[-12px_0_15px_-4px_rgba(0,0,0,0.15)] w-12" />
               </div>
@@ -367,95 +612,140 @@ export function MedicationRequestQuestion({
                   const isInactive = INACTIVE_MEDICATION_STATUSES.includes(
                     medication.status as (typeof INACTIVE_MEDICATION_STATUSES)[number],
                   );
+                  const dosageInstruction =
+                    medication.dosage_instruction[0] || {};
 
                   return (
-                    <React.Fragment key={medication.id}>
+                    <React.Fragment key={medication.id || index}>
                       {!desktopLayout ? (
-                        <Collapsible
-                          open={expandedMedicationIndex === index}
-                          onOpenChange={() => {
-                            setExpandedMedicationIndex(
-                              expandedMedicationIndex === index ? null : index,
-                            );
-                          }}
-                          className="border-b last:border-b-0"
+                        <Card
+                          className={cn(
+                            "mb-2 rounded-lg border-0 shadow-none",
+                            expandedMedicationIndex === index &&
+                              "border border-primary-500",
+                          )}
                         >
-                          <div
-                            className={cn(
-                              "flex items-center gap-2 px-2 py-0.5 rounded-md shadow-sm text-sm",
-                              isInactive ? "opacity-40" : "hover:bg-gray-50/50",
-                              expandedMedicationIndex === index
-                                ? "bg-gray-50"
-                                : "bg-gray-100",
-                            )}
+                          <Collapsible
+                            open={expandedMedicationIndex === index}
+                            onOpenChange={() => {
+                              setExpandedMedicationIndex(
+                                expandedMedicationIndex === index
+                                  ? null
+                                  : index,
+                              );
+                            }}
+                            className="w-full"
                           >
-                            <CollapsibleTrigger className="flex-1 text-left">
-                              <div
+                            <CollapsibleTrigger asChild>
+                              <CardHeader
                                 className={cn(
-                                  "font-medium text-gray-900",
-                                  isInactive &&
-                                    medication.status !== "ended" &&
-                                    "line-through",
+                                  "p-2 rounded-lg shadow-none bg-gray-50 cursor-pointer active:bg-gray-100 transition-colors",
+                                  {
+                                    "bg-gray-200 border border-gray-300":
+                                      expandedMedicationIndex !== index,
+                                  },
                                 )}
                               >
-                                {medication.medication?.display}
-                              </div>
+                                <div className="flex flex-col space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1 min-w-0 mr-2">
+                                      <CardTitle
+                                        className={cn(
+                                          "text-base text-gray-950 break-words",
+                                          isInactive &&
+                                            medication.status !== "ended" &&
+                                            "line-through",
+                                        )}
+                                        title={
+                                          medication.medication?.display ||
+                                          medication.requested_product_internal
+                                            ?.name
+                                        }
+                                      >
+                                        {medication.medication?.display ||
+                                          medication.requested_product_internal
+                                            ?.name}
+                                      </CardTitle>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {expandedMedicationIndex === index ? (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveMedication(index);
+                                          }}
+                                          disabled={isInactive || disabled}
+                                          className="size-10 p-4 border border-gray-400 bg-white shadow text-destructive"
+                                          data-cy="remove-medication"
+                                          aria-label="Remove medication"
+                                        >
+                                          <MinusCircledIcon className="size-5" />
+                                        </Button>
+                                      ) : null}
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="size-10 border border-gray-400 bg-white shadow p-4 pointer-events-none"
+                                        aria-label={
+                                          expandedMedicationIndex === index
+                                            ? "Collapse medication"
+                                            : "Expand medication"
+                                        }
+                                      >
+                                        {expandedMedicationIndex === index ? (
+                                          <ChevronsDownUp className="size-5" />
+                                        ) : (
+                                          <ChevronsUpDown className="size-5" />
+                                        )}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  {expandedMedicationIndex !== index && (
+                                    <div className="text-sm mt-1 text-gray-600">
+                                      {dosageInstruction?.dose_and_rate
+                                        ?.dose_quantity &&
+                                        `${dosageInstruction.dose_and_rate.dose_quantity.value} ${dosageInstruction.dose_and_rate.dose_quantity.unit?.display || ""}`}
+
+                                      {dosageInstruction?.dose_and_rate
+                                        ?.dose_range &&
+                                        formatDoseRange(
+                                          dosageInstruction.dose_and_rate
+                                            .dose_range,
+                                        )}
+
+                                      {dosageInstruction?.as_needed_boolean
+                                        ? ` · ${t("as_needed_prn")}`
+                                        : dosageInstruction?.timing?.code
+                                            ?.code &&
+                                          ` · ${MEDICATION_REQUEST_TIMING_OPTIONS[dosageInstruction.timing.code.code]?.display || ""}`}
+
+                                      {dosageInstruction?.timing?.repeat
+                                        ?.bounds_duration?.value &&
+                                        ` · ${dosageInstruction.timing.repeat.bounds_duration.value} ${dosageInstruction.timing.repeat.bounds_duration.unit}`}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardHeader>
                             </CollapsibleTrigger>
-                            <div className="flex items-center gap-1">
-                              {expandedMedicationIndex !== index && (
-                                <Button
-                                  aria-label="Expand Medication Request"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-8 text-gray-500 hover:text-gray-900"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setExpandedMedicationIndex(index);
-                                  }}
+                            <CollapsibleContent>
+                              <CardContent className="p-2 pt-2 space-y-3 rounded-lg bg-gray-50">
+                                <MedicationRequestGridRow
+                                  medication={medication}
                                   disabled={disabled}
-                                >
-                                  <Pencil2Icon className="size-4" />
-                                </Button>
-                              )}
-                              <TooltipComponent
-                                content={
-                                  medication.status === "entered_in_error"
-                                    ? t("medication_already_marked_as_error")
-                                    : t("remove_medication")
-                                }
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoveMedication(index);
-                                  }}
-                                  disabled={isInactive || disabled}
-                                  className="size-8"
-                                  data-cy="remove-medication"
-                                >
-                                  <MinusCircledIcon className="size-4" />
-                                </Button>
-                              </TooltipComponent>
-                            </div>
-                          </div>
-                          <CollapsibleContent>
-                            <div className="py-4 space-y-4 bg-white mx-2 mb-1">
-                              <MedicationRequestGridRow
-                                medication={medication}
-                                disabled={disabled}
-                                onUpdate={(updates) =>
-                                  handleUpdateMedication(index, updates)
-                                }
-                                onRemove={() => handleRemoveMedication(index)}
-                                index={index}
-                                questionId={questionnaireResponse.question_id}
-                                errors={errors}
-                              />
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
+                                  onUpdate={(updates) =>
+                                    handleUpdateMedication(index, updates)
+                                  }
+                                  onRemove={() => handleRemoveMedication(index)}
+                                  index={index}
+                                  questionId={questionnaireResponse.question_id}
+                                  errors={errors}
+                                />
+                              </CardContent>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </Card>
                       ) : (
                         <MedicationRequestGridRow
                           medication={medication}
@@ -477,15 +767,37 @@ export function MedicationRequestQuestion({
           </div>
         </div>
       )}
-      <div className="max-w-4xl" data-cy="add-medication-request">
-        <ValueSetSelect
+
+      {!desktopLayout ? (
+        <EntitySelectionSheet
+          open={!!newMedicationInSheet}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setNewMedicationInSheet(null);
+            }
+          }}
           system="system-medication"
-          placeholder={t("search_for_medications_to_add")}
-          onSelect={handleAddMedication}
-          disabled={disabled}
+          entityType="medication"
           searchPostFix=" clinical drug"
-        />
-      </div>
+          disabled={disabled}
+          onEntitySelected={handleAddMedication}
+          onConfirm={handleConfirmMedicationInSheet}
+          placeholder={addMedicationPlaceholder}
+          onProductEntitySelected={handleAddProductMedication}
+        >
+          {newMedicationSheetContent}
+        </EntitySelectionSheet>
+      ) : (
+        <div className="max-w-4xl" data-cy="add-medication-request">
+          <MedicationValueSetSelect
+            placeholder={addMedicationPlaceholder}
+            onSelect={handleAddMedication}
+            onProductSelect={handleAddProductMedication}
+            disabled={disabled}
+            title={t("select_medication")}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -512,9 +824,37 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
   const { t } = useTranslation();
   const [showDosageDialog, setShowDosageDialog] = useState(false);
   const desktopLayout = useBreakpoints({ lg: true, default: false });
-  const dosageInstruction = medication.dosage_instruction[0];
+  const dosageInstruction = medication.dosage_instruction[0] || {};
   const isReadOnly = !!medication.id;
   const { hasError } = useFieldError(questionId, errors, index);
+  const unitDisabled =
+    !!medication.requested_product_internal?.definitional?.dosage_form;
+
+  const [currentInstructions, setCurrentInstructions] = useState<Code[]>(
+    dosageInstruction?.additional_instruction || [],
+  );
+
+  const updateInstructions = (instructions: Code[]) => {
+    setCurrentInstructions(instructions);
+    handleUpdateDosageInstruction({
+      additional_instruction:
+        instructions.length > 0 ? instructions : undefined,
+    });
+  };
+
+  const addInstruction = (instruction: Code) => {
+    if (!currentInstructions.some((item) => item.code === instruction.code)) {
+      updateInstructions([...currentInstructions, instruction]);
+    } else {
+      toast.warning(`${instruction.display} ${t("is_already_selected")}`);
+    }
+  };
+
+  const removeInstruction = (instructionCode: string) => {
+    updateInstructions(
+      currentInstructions.filter((item) => item.code !== instructionCode),
+    );
+  };
 
   const handleUpdateDosageInstruction = (
     updates: Partial<MedicationRequestDosageInstruction>,
@@ -524,15 +864,15 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
     });
   };
 
-  const formatDoseRange = (range?: DoseRange) => {
-    if (!range?.high?.value) return "";
-    return `${range.low?.value} ${range.low?.unit?.display} → ${range.high?.value} ${range.high?.unit?.display}`;
-  };
   interface DosageDialogProps {
     dosageRange: DoseRange;
+    unitDisabled?: boolean;
   }
 
-  const DosageDialog: React.FC<DosageDialogProps> = ({ dosageRange }) => {
+  const DosageDialog: React.FC<DosageDialogProps> = ({
+    dosageRange,
+    unitDisabled,
+  }) => {
     const [localDoseRange, setLocalDoseRange] =
       useState<DoseRange>(dosageRange);
 
@@ -544,16 +884,20 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
           <ComboboxQuantityInput
             quantity={localDoseRange.low}
             onChange={(value) => {
-              setLocalDoseRange((prev) => ({
-                ...prev,
-                low: value,
-                high: {
-                  ...prev.high,
-                  unit: value.unit,
-                },
-              }));
+              if (value) {
+                setLocalDoseRange((prev) => ({
+                  ...prev,
+                  low: value,
+                  high: {
+                    ...prev.high,
+                    unit: value.unit || prev.high.unit,
+                  },
+                }));
+              }
             }}
             disabled={disabled || isReadOnly}
+            unitDisabled={unitDisabled}
+            className="lg:max-w-[200px]"
           />
         </div>
         <div>
@@ -561,16 +905,20 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
           <ComboboxQuantityInput
             quantity={localDoseRange.high}
             onChange={(value) => {
-              setLocalDoseRange((prev) => ({
-                ...prev,
-                high: value,
-                low: {
-                  ...prev.low,
-                  unit: value.unit,
-                },
-              }));
+              if (value) {
+                setLocalDoseRange((prev) => ({
+                  ...prev,
+                  high: value,
+                  low: {
+                    ...prev.low,
+                    unit: value.unit || prev.low.unit,
+                  },
+                }));
+              }
             }}
             disabled={disabled || !localDoseRange.low.value || isReadOnly}
+            unitDisabled={unitDisabled}
+            className="lg:max-w-[200px]"
           />
         </div>
         <div className="flex justify-end gap-2">
@@ -631,27 +979,32 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
   return (
     <div
       className={cn(
-        "grid grid-cols-1 lg:grid-cols-[280px_180px_170px_160px_300px_180px_250px_180px_160px_200px_180px_48px] border-b border-gray-200 hover:bg-gray-50/50",
+        "grid grid-cols-1 lg:grid-cols-[280px_220px_180px_160px_300px_180px_250px_180px_160px_220px_180px_48px] border-b border-gray-200 hover:bg-gray-50/50 space-y-3 lg:space-y-0",
         {
           "opacity-40 pointer-events-none": disabled,
         },
       )}
     >
       {/* Medicine Name */}
-      <div className="lg:p-4 lg:px-2 lg:py-1 flex items-center justify-between lg:justify-start lg:col-span-1 lg:border-r border-gray-200 font-medium overflow-hidden text-sm">
-        <span
-          className={cn(
-            "break-words line-clamp-2 hidden lg:block",
-            disabled &&
-              medication.status !== "entered_in_error" &&
-              "line-through",
-          )}
+      {desktopLayout && (
+        <div
+          className="lg:p-4 lg:px-2 lg:py-1 flex items-center justify-between lg:justify-start lg:col-span-1 lg:border-r border-gray-200 font-medium overflow-hidden text-sm"
+          data-cy="medicine-name-view"
         >
-          {medication.medication?.display}
-        </span>
-      </div>
+          <span
+            className={cn(
+              "break-words line-clamp-2 hidden lg:block",
+              disabled &&
+                medication.status !== "entered_in_error" &&
+                "line-through",
+            )}
+          >
+            {displayMedicationName(medication)}
+          </span>
+        </div>
+      )}
       {/* Dosage */}
-      <div className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
+      <div className="lg:px-2 p-1 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
         <Label className="mb-1.5 block text-sm lg:hidden">
           {t("dosage")}
           <span className="text-red-500 ml-0.5">*</span>
@@ -682,19 +1035,23 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
                   data-cy="dosage-input"
                   quantity={dosageInstruction?.dose_and_rate?.dose_quantity}
                   onChange={(value) => {
-                    if (!value.value || !value.unit) return;
-                    handleUpdateDosageInstruction({
-                      dose_and_rate: {
-                        type: "ordered",
-                        dose_quantity: {
-                          value: value.value,
-                          unit: value.unit,
+                    if (value) {
+                      handleUpdateDosageInstruction({
+                        dose_and_rate: {
+                          type: "ordered",
+                          dose_quantity: value,
+                          dose_range: undefined,
                         },
-                        dose_range: undefined,
-                      },
-                    });
+                      });
+                    } else {
+                      handleUpdateDosageInstruction({
+                        dose_and_rate: undefined,
+                      });
+                    }
                   }}
                   disabled={disabled || isReadOnly}
+                  unitDisabled={unitDisabled}
+                  className="lg:max-w-[200px]"
                 />
               </div>
               <div className="flex justify-end">
@@ -724,9 +1081,10 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
               <PopoverTrigger asChild>
                 <div className="w-full" />
               </PopoverTrigger>
-              <PopoverContent className="w-80 p-4" align="start">
+              <PopoverContent className="w-55 p-4" align="start">
                 <DosageDialog
                   dosageRange={dosageInstruction.dose_and_rate.dose_range}
+                  unitDisabled={unitDisabled}
                 />
               </PopoverContent>
             </Popover>
@@ -735,13 +1093,14 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
               <DialogContent>
                 <DosageDialog
                   dosageRange={dosageInstruction.dose_and_rate.dose_range}
+                  unitDisabled={unitDisabled}
                 />
               </DialogContent>
             </Dialog>
           ))}
       </div>
       {/* Frequency */}
-      <div className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
+      <div className="lg:px-2 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden">
         <Label className="mb-1.5 block text-sm lg:hidden">
           {t("frequency")}
           <span className="text-red-500 ml-0.5">*</span>
@@ -801,7 +1160,7 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
         />
       </div>
       {/* Duration */}
-      <div className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
+      <div className="lg:px-2 p-1 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
         <Label className="mb-1.5 block text-sm lg:hidden">
           {t("duration")}
         </Label>
@@ -810,11 +1169,15 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
             "flex gap-2",
             hasError(MEDICATION_REQUEST_FIELDS.DURATION.key) &&
               "border border-red-500 rounded-md p-1",
+            dosageInstruction?.as_needed_boolean &&
+              "opacity-50 bg-gray-100 rounded-md",
           )}
         >
           {dosageInstruction?.timing && (
             <Input
               type="number"
+              inputMode="decimal"
+              pattern="[0-9]*[.]?[0-9]*"
               min={0}
               value={
                 dosageInstruction.timing.repeat.bounds_duration?.value == 0
@@ -875,7 +1238,13 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
               isReadOnly
             }
           >
-            <SelectTrigger className="h-9 text-sm w-24">
+            <SelectTrigger
+              className={cn(
+                "h-9 text-sm w-full",
+                dosageInstruction?.as_needed_boolean &&
+                  "cursor-not-allowed bg-gray-50",
+              )}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -895,59 +1264,46 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
         />
       </div>
       {/* Instructions */}
-      <div
-        className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden"
-        data-cy="instructions"
-      >
+      <div className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
         <Label className="mb-1.5 block text-sm lg:hidden">
           {t("instructions")}
         </Label>
         {dosageInstruction?.as_needed_boolean ? (
-          <MultiValueSetSelect
-            options={[
-              {
-                system: "system-as-needed-reason",
-                value: dosageInstruction?.as_needed_for || null,
-                label: t("prn_reason"),
-                placeholder: t("select_prn_reason"),
-                onSelect: (value: Code | null) => {
-                  handleUpdateDosageInstruction({
-                    as_needed_for: value || undefined,
-                  });
-                },
-              },
-              {
-                system: "system-additional-instruction",
-                value: dosageInstruction?.additional_instruction?.[0] || null,
-                label: t("additional_instructions"),
-                placeholder: t("select_additional_instructions"),
-                onSelect: (value: Code | null) => {
-                  handleUpdateDosageInstruction({
-                    additional_instruction: value ? [value] : undefined,
-                  });
-                },
-              },
-            ]}
-            disabled={disabled || isReadOnly}
-          />
+          <div className="space-y-2">
+            <ValueSetSelect
+              system="system-as-needed-reason"
+              value={dosageInstruction?.as_needed_for || null}
+              placeholder={t("select_prn_reason")}
+              onSelect={(value) => {
+                handleUpdateDosageInstruction({
+                  as_needed_for: value || undefined,
+                });
+              }}
+              disabled={disabled || isReadOnly}
+              asSheet
+            />
+
+            <InstructionsPopover
+              currentInstructions={currentInstructions}
+              removeInstruction={removeInstruction}
+              addInstruction={addInstruction}
+              isReadOnly={isReadOnly}
+              disabled={disabled}
+            />
+          </div>
         ) : (
-          <ValueSetSelect
-            system="system-additional-instruction"
-            value={dosageInstruction?.additional_instruction?.[0]}
-            onSelect={(instruction) =>
-              handleUpdateDosageInstruction({
-                additional_instruction: instruction ? [instruction] : undefined,
-              })
-            }
-            placeholder={t("select_additional_instructions")}
-            disabled={disabled || isReadOnly}
-            data-cy="medication-instructions"
+          <InstructionsPopover
+            currentInstructions={currentInstructions}
+            removeInstruction={removeInstruction}
+            addInstruction={addInstruction}
+            isReadOnly={isReadOnly}
+            disabled={disabled}
           />
         )}
       </div>
       {/* Route */}
       <div
-        className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden"
+        className="lg:px-2 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden"
         data-cy="route"
       >
         <Label className="mb-1.5 block text-sm lg:hidden">{t("route")}</Label>
@@ -957,11 +1313,12 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
           onSelect={(route) => handleUpdateDosageInstruction({ route })}
           placeholder={t("select_route")}
           disabled={disabled || isReadOnly}
+          asSheet
         />
       </div>
       {/* Site */}
       <div
-        className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden"
+        className="lg:px-2 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden"
         data-cy="site"
       >
         <Label className="mb-1.5 block text-sm lg:hidden">{t("site")}</Label>
@@ -971,12 +1328,12 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
           onSelect={(site) => handleUpdateDosageInstruction({ site })}
           placeholder={t("select_site")}
           disabled={disabled || isReadOnly}
-          wrapTextForSmallScreen={true}
+          asSheet
         />
       </div>
       {/* Method */}
       <div
-        className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden"
+        className="lg:px-2 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden"
         data-cy="method"
       >
         <Label className="mb-1.5 block text-sm lg:hidden">{t("method")}</Label>
@@ -987,10 +1344,11 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
           placeholder={t("select_method")}
           disabled={disabled || isReadOnly}
           count={20}
+          asSheet
         />
       </div>
       {/* Intent */}
-      <div className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
+      <div className="lg:px-2 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden">
         <Label className="mb-1.5 block text-sm lg:hidden">{t("intent")}</Label>
         <Select
           value={medication.intent}
@@ -1015,58 +1373,29 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
         </Select>
       </div>
       {/* Authored On */}
-      <div className="lg:px-1 lg:py-1 lg:border-r border-gray-200 overflow-hidden">
+      <div className="lg:px-1 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden">
         <Label className="mb-1.5 block text-sm lg:hidden">
           {t("authored_on")}
         </Label>
-        <DateTimePicker
-          value={
-            medication.authored_on
-              ? new Date(medication.authored_on)
-              : undefined
-          }
-          onChange={(date) => {
-            if (!date) return;
-            onUpdate?.({ authored_on: date.toISOString() });
-          }}
+        <DateTimeInput
+          value={medication.authored_on}
+          onDateChange={(val) => onUpdate?.({ authored_on: val })}
           disabled={disabled || isReadOnly}
         />
       </div>
       {/* Notes */}
       <div
-        className="lg:px-2 lg:py-1 lg:border-r border-gray-200 overflow-hidden"
+        className="lg:px-2 lg:py-1 p-1 lg:border-r border-gray-200 overflow-hidden"
         data-cy="notes"
       >
-        <Label className="mb-1.5 block text-sm lg:hidden">{t("notes")}</Label>
-        {desktopLayout ? (
-          <>
-            <Label className="mb-1.5 block text-sm lg:hidden">
-              {t("notes")}
-            </Label>
-            <Input
-              value={medication.note || ""}
-              onChange={(e) => onUpdate?.({ note: e.target.value })}
-              placeholder={t("add_notes")}
-              disabled={disabled}
-              className="h-9 text-sm"
-            />
-          </>
-        ) : (
-          <NotesInput
-            className="mt-2"
-            questionnaireResponse={{
-              question_id: "",
-              structured_type: "medication_request",
-              link_id: "",
-              values: [],
-              note: medication.note,
-            }}
-            handleUpdateNote={(note) => {
-              onUpdate?.({ note: note });
-            }}
-            disabled={disabled}
-          />
-        )}
+        <Label className="mb-1.5 block text-sm lg:hidden">{t("note")}</Label>
+        <Input
+          value={medication.note || ""}
+          onChange={(e) => onUpdate?.({ note: e.target.value })}
+          placeholder={t("additional_notes")}
+          disabled={disabled}
+          className="h-9 text-sm"
+        />
       </div>
 
       {/* Remove Button */}
@@ -1078,6 +1407,7 @@ const MedicationRequestGridRow: React.FC<MedicationRequestGridRowProps> = ({
           onClick={onRemove}
           disabled={disabled}
           className="size-8"
+          aria-label="Remove medication"
         >
           <MinusCircledIcon className="size-4" />
         </Button>

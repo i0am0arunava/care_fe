@@ -2,8 +2,6 @@ import { BadgeCheck, CircleDashed, Clock, Eye } from "lucide-react";
 import { Link } from "raviger";
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@/lib/utils";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +12,11 @@ import { encounterIcons } from "@/common/constants";
 
 import { formatDateTime } from "@/Utils/utils";
 import { usePermissions } from "@/context/PermissionContext";
-import { Encounter, completedEncounterStatus } from "@/types/emr/encounter";
+import {
+  Encounter,
+  completedEncounterStatus,
+} from "@/types/emr/encounter/encounter";
+import { getTagHierarchyDisplay } from "@/types/emr/tagConfig/tagConfig";
 
 interface EncounterCardProps {
   encounter: Encounter;
@@ -59,13 +61,12 @@ export const EncounterCard = (props: EncounterCardProps) => {
           <CardContent className="p-4 sm:p-2 space-y-4">
             <div className="flex flex-wrap gap-2 sm:gap-4">
               <Badge
-                variant="outline"
-                className={cn(
-                  "inline-flex gap-2 py-1",
+                variant={
                   completedEncounterStatus.includes(encounter.status)
-                    ? "bg-green-100 text-green-800 border-green-200"
-                    : "bg-purple-100 text-indigo-800 border-purple-200",
-                )}
+                    ? "green"
+                    : "indigo"
+                }
+                className="inline-flex gap-2 py-1"
               >
                 {completedEncounterStatus.includes(encounter.status) ? (
                   <BadgeCheck className="size-4 text-teal-700" />
@@ -75,8 +76,8 @@ export const EncounterCard = (props: EncounterCardProps) => {
                 {t(`encounter_status__${encounter.status}`)}
               </Badge>
               <Badge
-                variant="outline"
-                className="inline-flex items-center gap-2 py-1 bg-gray-100 text-gray-800 border-gray-200"
+                variant="secondary"
+                className="inline-flex items-center gap-2 py-1"
               >
                 {Icon}
                 {t(`encounter_class__${encounter.encounter_class}`)}
@@ -127,6 +128,19 @@ export const EncounterCard = (props: EncounterCardProps) => {
                 </div>
               )}
             </div>
+
+            {encounter.tags.length > 0 && (
+              <div className="w-full mx-3 sm:w-auto">
+                <div className="flex flex-wrap gap-2">
+                  {encounter.tags.map((tag) => (
+                    <Badge variant="outline" key={tag.id}>
+                      {getTagHierarchyDisplay(tag)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {canAccess && (
               <div className="w-full py-2 bg-gray-100 px-2">
                 <Button variant="outline" className="p-2 border border-black">

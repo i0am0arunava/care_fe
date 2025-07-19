@@ -50,12 +50,12 @@ import mutate from "@/Utils/request/mutate";
 import FacilityOrganizationSelector from "@/pages/Facility/settings/organizations/components/FacilityOrganizationSelector";
 import {
   ENCOUNTER_CLASS,
-  ENCOUNTER_CLASSES_ICONS,
+  ENCOUNTER_CLASS_ICONS,
   ENCOUNTER_PRIORITY,
   Encounter,
   EncounterClass,
   EncounterRequest,
-} from "@/types/emr/encounter";
+} from "@/types/emr/encounter/encounter";
 
 interface Props {
   patientId: string;
@@ -88,7 +88,7 @@ export default function CreateEncounterForm({
     start_date: z.string(),
   });
 
-  const form = useForm<z.infer<typeof encounterFormSchema>>({
+  const form = useForm({
     resolver: zodResolver(encounterFormSchema),
     defaultValues: {
       status: "planned",
@@ -127,15 +127,7 @@ export default function CreateEncounterForm({
   }
 
   return (
-    <Sheet
-      open={isOpen}
-      onOpenChange={(open) => {
-        setIsOpen(open);
-        if (!open) {
-          form.reset();
-        }
-      }}
-    >
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
         {trigger || (
           <Button
@@ -232,7 +224,7 @@ export default function CreateEncounterForm({
                   <FormLabel>{t("type_of_encounter")}</FormLabel>
                   <div className="grid grid-cols-2 gap-3">
                     {ENCOUNTER_CLASS.map((value) => {
-                      const Icon = ENCOUNTER_CLASSES_ICONS[value];
+                      const Icon = ENCOUNTER_CLASS_ICONS[value];
                       return (
                         <Button
                           key={value}
@@ -275,7 +267,10 @@ export default function CreateEncounterForm({
                       defaultValue={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger data-cy="encounter-status">
+                        <SelectTrigger
+                          data-cy="encounter-status"
+                          ref={field.ref}
+                        >
                           <SelectValue placeholder="Select status" />
                         </SelectTrigger>
                       </FormControl>
@@ -303,7 +298,10 @@ export default function CreateEncounterForm({
                       defaultValue={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger data-cy="encounter-priority">
+                        <SelectTrigger
+                          data-cy="encounter-priority"
+                          ref={field.ref}
+                        >
                           <SelectValue placeholder="Select priority" />
                         </SelectTrigger>
                       </FormControl>
@@ -327,12 +325,12 @@ export default function CreateEncounterForm({
                 <FormItem>
                   <FacilityOrganizationSelector
                     facilityId={facilityId}
-                    value={field.value[0]}
+                    value={field.value}
                     onChange={(value) => {
                       if (value === null) {
                         form.setValue("organizations", []);
                       } else {
-                        form.setValue("organizations", [value]);
+                        form.setValue("organizations", value);
                       }
                     }}
                   />
@@ -340,13 +338,25 @@ export default function CreateEncounterForm({
                 </FormItem>
               )}
             />
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isPending || !form.watch("organizations").length}
-            >
-              {isPending ? t("creating") : t("create_encounter")}
-            </Button>
+            <div className="flex justify-end mt-6 space-x-2">
+              <Button
+                type="button"
+                onClick={() => {
+                  setIsOpen(false);
+                  form.reset();
+                }}
+                className="bg-white text-gray-800 border border-gray-300 hover:bg-gray-100"
+              >
+                {t("cancel")}
+              </Button>
+              <Button
+                data-cy="create-encounter-button"
+                type="submit"
+                disabled={isPending || !form.watch("organizations").length}
+              >
+                {isPending ? t("creating") : t("create_encounter")}
+              </Button>
+            </div>
           </form>
         </Form>
       </SheetContent>

@@ -1,6 +1,8 @@
 import { MoreVertical } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { cn } from "@/lib/utils";
+
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { LocationHistory } from "@/types/emr/encounter";
+import { LocationHistory } from "@/types/emr/encounter/encounter";
 import { LocationAssociationStatus } from "@/types/location/association";
 
 interface LocationActionButtonsProps {
@@ -17,7 +19,7 @@ interface LocationActionButtonsProps {
   location: LocationHistory;
   onMove: () => void;
   onComplete?: (location: LocationHistory) => void;
-  onCancel?: () => void;
+  onCancel: () => void;
   onAssignNow?: () => void;
   onUpdateTime?: (location: LocationHistory) => void;
 }
@@ -36,22 +38,20 @@ export function LocationActionButtons({
   type ActionButton = {
     label: string;
     onClick: () => void;
-    variant: "outline" | "primary" | "link";
+    variant: "outline" | "primary" | "link" | "destructive";
     className?: string;
     "data-cy"?: string;
   };
 
   const buttons: ActionButton[] = [];
 
-  if (status === "planned" && onCancel) {
-    buttons.push({
-      label: t("cancel_plan"),
-      onClick: onCancel,
-      variant: "link",
-      className: "underline underline-offset-2",
-      "data-cy": "cancel-bed-plan-button",
-    });
-  }
+  buttons.push({
+    label: status === "planned" ? t("cancel_plan") : t("mark_as_error"),
+    onClick: onCancel,
+    variant: "destructive",
+    className: "",
+    "data-cy": "cancel-bed-plan-button",
+  });
 
   buttons.push({
     label: t("move_to_another_bed"),
@@ -81,18 +81,20 @@ export function LocationActionButtons({
   }
 
   return (
-    <div className="flex gap-2">
-      {buttons.map((button, index) => (
-        <Button
-          key={index}
-          variant={button.variant}
-          onClick={button.onClick}
-          className={button.className}
-          data-cy={button["data-cy"]}
-        >
-          {button.label}
-        </Button>
-      ))}
+    <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-wrap gap-2 flex-1">
+        {buttons.map((button, index) => (
+          <Button
+            key={index}
+            variant={button.variant}
+            onClick={button.onClick}
+            className={cn("sm:w-auto w-full", button.className)}
+            data-cy={button["data-cy"]}
+          >
+            {button.label}
+          </Button>
+        ))}
+      </div>
       {onUpdateTime && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

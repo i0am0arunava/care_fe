@@ -28,9 +28,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-import routes from "@/Utils/request/api";
 import mutate from "@/Utils/request/mutate";
 import query from "@/Utils/request/query";
+import { BatchRequestBody } from "@/types/base/batch/batch";
+import batchApi from "@/types/base/batch/batchApi";
 import {
   LocationFormOptions,
   type LocationWrite,
@@ -38,10 +39,7 @@ import {
   type Status,
 } from "@/types/location/location";
 import locationApi from "@/types/location/locationApi";
-import type {
-  BatchRequestBody,
-  BatchSubmissionResult,
-} from "@/types/questionnaire/batch";
+import type { BatchSubmissionResult } from "@/types/questionnaire/batch";
 
 interface Props {
   facilityId: string;
@@ -101,7 +99,7 @@ export default function LocationForm({
   };
 
   const { data: location, isLoading } = useQuery({
-    queryKey: ["location", locationId],
+    queryKey: ["location", facilityId, locationId],
     queryFn: query(locationApi.get, {
       pathParams: { facility_id: facilityId, id: locationId },
     }),
@@ -110,7 +108,7 @@ export default function LocationForm({
 
   const isEditMode = !!location?.id;
 
-  const form = useForm<FormValues>({
+  const form = useForm({
     resolver: zodResolver(formSchema),
     defaultValues: {
       ...defaultValues,
@@ -205,7 +203,7 @@ export default function LocationForm({
   });
 
   const { mutate: submitBatch } = useMutation({
-    mutationFn: mutate(routes.batchRequest),
+    mutationFn: mutate(batchApi.batchRequest),
     onSuccess: (data: { results: BatchSubmissionResult[] }) => {
       toast.success(
         t("bed_created_notification", { count: data.results.length }),
@@ -284,6 +282,10 @@ export default function LocationForm({
               <FormLabel>{t("location_form")}</FormLabel>
               <Select
                 onValueChange={(value) => {
+                  if (value === "bd" && !parentId) {
+                    toast.error(t("bed_requires_parent_location"));
+                    return;
+                  }
                   field.onChange(value);
                   if (value !== "bd") {
                     form.setValue("enableBulkCreation", false);
@@ -331,7 +333,7 @@ export default function LocationForm({
                 </FormControl>
                 <div className="space-y-1 leading-none">
                   <FormLabel>{t("create_multiple_beds")}</FormLabel>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-gray-500">
                     {t("create_multiple_beds_description")}
                   </p>
                 </div>
@@ -372,7 +374,7 @@ export default function LocationForm({
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t("name")}</FormLabel>
+              <FormLabel aria-required>{t("name")}</FormLabel>
               <FormControl>
                 <Input {...field} data-cy="location-name-input" />
               </FormControl>
@@ -405,7 +407,7 @@ export default function LocationForm({
                     </FormControl>
                     <div className="space-y-1 leading-none">
                       <FormLabel>{t("customize_bed_names")}</FormLabel>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-gray-500">
                         {t("customize_bed_names_description")}
                       </p>
                     </div>
@@ -464,9 +466,9 @@ export default function LocationForm({
                   </div>
                 </div>
               ) : (
-                <div className="rounded-md bg-muted p-4">
+                <div className="rounded-md p-4">
                   <h4 className="font-medium mb-2">{t("preview_bed_names")}</h4>
-                  <div className="text-sm text-muted-foreground flex flex-wrap gap-2">
+                  <div className="text-sm text-gray-700 flex flex-wrap gap-2">
                     {bedFields.map((field) => (
                       <div
                         key={field.id}
@@ -553,9 +555,11 @@ export default function LocationForm({
 
         <Button
           type="submit"
-          disabled={Boolean(
-            isPending || (location?.id && !form.formState.isDirty),
-          )}
+          disabled={
+            isPending ||
+            !form.formState.isValid ||
+            (!!location?.id && !form.formState.isDirty)
+          }
         >
           {isPending ? (
             <>{isEditMode ? t("updating") : t("creating")}</>

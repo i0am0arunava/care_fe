@@ -9,6 +9,7 @@ import * as z from "zod";
 
 import CareIcon from "@/CAREUI/icons/CareIcon";
 
+import RadioInput from "@/components/ui/RadioInput";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Autocomplete from "@/components/ui/autocomplete";
 import { Button } from "@/components/ui/button";
@@ -23,7 +24,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -49,6 +49,7 @@ import mutate from "@/Utils/request/mutate";
 import query from "@/Utils/request/query";
 import { mergeAutocompleteOptions } from "@/Utils/utils";
 import validators from "@/Utils/validators";
+import patientApi from "@/types/emr/patient/patientApi";
 import facilityApi from "@/types/facility/facilityApi";
 import { ResourceRequest } from "@/types/resourceRequest/resourceRequest";
 import { UserBase } from "@/types/user/user";
@@ -81,16 +82,14 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
       .min(1, { message: t("field_required") }),
     referring_facility_contact_number: validators().phoneNumber.required,
     priority: z.number().default(1),
-    assigned_to: id
-      ? z.string().min(1, { message: t("field_required") })
-      : z.string().optional(),
+    assigned_to: z.string().optional(),
   });
 
   type ResourceFormValues = z.infer<typeof resourceFormSchema>;
 
   const { data: patientData } = useQuery({
     queryKey: ["patient", related_patient],
-    queryFn: query(routes.patient.getPatient, {
+    queryFn: query(patientApi.getPatient, {
       pathParams: { id: String(related_patient) },
     }),
     enabled: !!related_patient,
@@ -104,7 +103,7 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
     enabled: !!id,
   });
 
-  const form = useForm<ResourceFormValues>({
+  const form = useForm({
     resolver: zodResolver(resourceFormSchema),
     defaultValues: {
       status: "pending",
@@ -209,13 +208,19 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
     form.setValue(
       "referring_facility_contact_name",
       `${authUser.first_name} ${authUser.last_name}`.trim(),
-      { shouldDirty: true },
+      {
+        shouldDirty: true,
+        shouldValidate: true,
+      },
     );
     if (authUser.phone_number) {
       form.setValue(
         "referring_facility_contact_number",
         authUser.phone_number,
-        { shouldDirty: true },
+        {
+          shouldDirty: true,
+          shouldValidate: true,
+        },
       );
     }
   };
@@ -261,15 +266,19 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 items-start">
               <FormField
                 control={form.control}
                 name="assigned_facility"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("facility_for_care_support")}</FormLabel>
+                    <FormLabel aria-required>
+                      {t("facility_for_care_support")}
+                    </FormLabel>
                     <FormControl>
                       <Autocomplete
+                        {...field}
+                        showClearButton={!id}
                         data-cy="select-facility"
                         options={mergeAutocompleteOptions(
                           facilityOptions ?? [],
@@ -290,10 +299,17 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
                           if (facility) {
                             form.setValue("assigned_facility", facility, {
                               shouldDirty: true,
+                              shouldValidate: true,
                             });
                           } else {
                             form.resetField("assigned_facility");
                           }
+
+                          // When the assigned facility changes, we need to clear the assigned to user
+                          form.setValue("assigned_to", undefined, {
+                            shouldDirty: true,
+                          });
+                          setAssignedToUser(undefined);
                         }}
                       />
                     </FormControl>
@@ -309,31 +325,17 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
                 control={form.control}
                 name="emergency"
                 render={({ field }) => (
-                  <FormItem className="space-y-3">
+                  <FormItem>
                     <FormLabel>{t("is_this_an_emergency")}</FormLabel>
                     <FormControl>
-                      <RadioGroup
+                      <RadioInput
+                        {...field}
                         onValueChange={field.onChange}
-                        value={field.value}
-                        className="flex gap-4"
-                      >
-                        <FormItem className="flex">
-                          <FormControl>
-                            <RadioGroupItem value="true" />
-                          </FormControl>
-                          <FormLabel className="font-normal">
-                            {t("yes")}
-                          </FormLabel>
-                        </FormItem>
-                        <FormItem className="flex">
-                          <FormControl>
-                            <RadioGroupItem value="false" />
-                          </FormControl>
-                          <FormLabel className="font-normal">
-                            {t("no")}
-                          </FormLabel>
-                        </FormItem>
-                      </RadioGroup>
+                        options={[
+                          { value: "true", label: t("yes") },
+                          { value: "false", label: t("no") },
+                        ]}
+                      />
                     </FormControl>
                     <FormDescription>
                       {t("emergency_description")}
@@ -351,7 +353,10 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
                     <FormLabel aria-required>{t("status")}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger data-cy="select-status-dropdown">
+                        <SelectTrigger
+                          data-cy="select-status-dropdown"
+                          ref={field.ref}
+                        >
                           <SelectValue placeholder={t("select_status")} />
                         </SelectTrigger>
                       </FormControl>
@@ -376,7 +381,10 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
                     <FormLabel aria-required>{t("category")}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger data-cy="select-category-dropdown">
+                        <SelectTrigger
+                          data-cy="select-category-dropdown"
+                          ref={field.ref}
+                        >
                           <SelectValue
                             placeholder={t("category_description")}
                           />
@@ -400,17 +408,16 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
                   name="assigned_to"
                   render={() => (
                     <FormItem>
-                      <FormLabel aria-required>{t("assigned_to")}</FormLabel>
+                      <FormLabel>{t("assigned_to")}</FormLabel>
                       <FormControl>
-                        <div data-cy="select-assigned-user">
-                          <UserSelector
-                            selected={assignedToUser}
-                            onChange={handleUserChange}
-                            placeholder={t("search_users")}
-                            noOptionsMessage={t("no_users_found")}
-                            popoverClassName="w-full"
-                          />
-                        </div>
+                        <UserSelector
+                          facilityId={form.watch("assigned_facility")?.id}
+                          selected={assignedToUser}
+                          onChange={handleUserChange}
+                          placeholder={t("search_users")}
+                          noOptionsMessage={t("no_users_found")}
+                          popoverClassName="w-full"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -498,7 +505,7 @@ export default function ResourceForm({ facilityId, id }: ResourceProps) {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 items-start">
               <FormField
                 control={form.control}
                 name="referring_facility_contact_name"

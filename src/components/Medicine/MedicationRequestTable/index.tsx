@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { PencilIcon } from "lucide-react";
-import { Link } from "raviger";
-import { useEffect, useState } from "react";
+import { PencilIcon, PlusIcon } from "lucide-react";
+import { Link, usePathParams } from "raviger";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import CareIcon from "@/CAREUI/icons/CareIcon";
 
@@ -15,15 +14,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Loading from "@/components/Common/Loading";
 import { AdministrationTab } from "@/components/Medicine/MedicationAdministration/AdministrationTab";
 import { MedicationsTable } from "@/components/Medicine/MedicationsTable";
-
-import useAppHistory from "@/hooks/useAppHistory";
-
-import { getPermissions } from "@/common/Permissions";
+import { MedicationStatementList } from "@/components/Patient/MedicationStatementList";
 
 import query from "@/Utils/request/query";
-import { usePermissions } from "@/context/PermissionContext";
-import { Encounter, inactiveEncounterStatus } from "@/types/emr/encounter";
-import { MedicationRequestRead } from "@/types/emr/medicationRequest";
+import { useEncounter } from "@/pages/Encounters/utils/EncounterProvider";
+import useCurrentFacility from "@/pages/Facility/utils/useCurrentFacility";
+import { inactiveEncounterStatus } from "@/types/emr/encounter/encounter";
+import { MedicationRequestRead } from "@/types/emr/medicationRequest/medicationRequest";
 import medicationRequestApi from "@/types/emr/medicationRequest/medicationRequestApi";
 
 interface EmptyStateProps {
@@ -62,48 +59,52 @@ export const EmptyState = ({
   );
 };
 
-interface Props {
-  readonly?: boolean;
-  patientId: string;
-  encounter: Encounter;
-}
-
-export default function MedicationRequestTable({
-  patientId,
-  encounter,
-}: Props) {
+export default function MedicationRequestTable() {
   const { t } = useTranslation();
 
+  const {
+    patientId,
+    selectedEncounterId: encounterId,
+    selectedEncounter: encounter,
+    patientPermissions: { canViewClinicalData },
+    selectedEncounterPermissions: { canViewEncounter, canWriteEncounter },
+    currentEncounterId,
+  } = useEncounter();
   const [searchQuery, setSearchQuery] = useState("");
   const [showStopped, setShowStopped] = useState(false);
-  const { hasPermission } = usePermissions();
-  const { canViewClinicalData, canViewEncounter, canWriteEncounter } =
-    getPermissions(hasPermission, encounter.permissions);
   const canAccess = canViewClinicalData || canViewEncounter;
-  const { goBack } = useAppHistory();
-
+  const subpathMatch = usePathParams("/facility/:facilityId/*");
+  const facilityIdExists = !!subpathMatch?.facilityId;
+  const { facilityId } = useCurrentFacility();
   const canWrite =
-    canWriteEncounter && !inactiveEncounterStatus.includes(encounter.status);
+    !!encounter &&
+    encounterId === currentEncounterId &&
+    facilityIdExists &&
+    canWriteEncounter &&
+    !inactiveEncounterStatus.includes(encounter.status);
+
   const { data: activeMedications, isLoading: loadingActive } = useQuery({
-    queryKey: ["medication_requests_active", patientId],
+    queryKey: ["medication_requests_active", patientId, encounterId],
     queryFn: query(medicationRequestApi.list, {
       pathParams: { patientId: patientId },
       queryParams: {
-        encounter: encounter.id,
+        encounter: encounterId,
         limit: 100,
-        status: ["active", "on-hold", "draft", "unknown"].join(","),
+        status: ["active", "on_hold", "draft", "unknown"].join(","),
+        facility: facilityId,
       },
     }),
     enabled: !!patientId && canAccess,
   });
 
   const { data: stoppedMedications, isLoading: loadingStopped } = useQuery({
-    queryKey: ["medication_requests_stopped", patientId],
+    queryKey: ["medication_requests_stopped", patientId, encounterId],
     queryFn: query(medicationRequestApi.list, {
       pathParams: { patientId: patientId },
       queryParams: {
-        encounter: encounter.id,
+        encounter: encounterId,
         limit: 100,
+        facility: facilityId,
         status: ["ended", "completed", "cancelled", "entered_in_error"].join(
           ",",
         ),
@@ -111,14 +112,6 @@ export default function MedicationRequestTable({
     }),
     enabled: !!patientId && canAccess,
   });
-
-  useEffect(() => {
-    if (!canAccess) {
-      toast.error("You do not have permission to view this encounter");
-      goBack();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canAccess]);
 
   const medications = showStopped
     ? [
@@ -144,20 +137,29 @@ export default function MedicationRequestTable({
     <div className="space-y-2">
       <div className="rounded-lg">
         <Tabs defaultValue="prescriptions">
-          <TabsList>
-            <TabsTrigger
-              value="prescriptions"
-              className="data-[state=active]:bg-white rounded-md px-4 font-semibold"
-            >
-              {t("prescriptions")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="administration"
-              className="data-[state=active]:bg-white rounded-md px-4 font-semibold"
-            >
-              {t("medicine_administration")}
-            </TabsTrigger>
-          </TabsList>
+          <ScrollArea className="w-full">
+            <TabsList className="w-fit">
+              <TabsTrigger
+                value="prescriptions"
+                className="data-[state=active]:bg-white rounded-md px-4 font-semibold"
+              >
+                {t("prescriptions")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="ongoing"
+                className="data-[state=active]:bg-white rounded-md px-4 font-semibold"
+              >
+                {t("medication_statements")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="administration"
+                className="data-[state=active]:bg-white rounded-md px-4 font-semibold"
+              >
+                {t("medicine_administration")}
+              </TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
 
           <TabsContent value="prescriptions">
             <div className="flex flex-col gap-2">
@@ -191,22 +193,33 @@ export default function MedicationRequestTable({
                       data-cy="edit-prescription"
                     >
                       <Link href={`questionnaire/medication_request`}>
-                        <PencilIcon className="mr-2 size-4" />
-                        {t("edit")}
+                        {!activeMedications?.results?.length ? (
+                          <>
+                            <PlusIcon className="mr-2 size-4" />
+                            {t("add")}
+                          </>
+                        ) : (
+                          <>
+                            <PencilIcon className="mr-2 size-4" />
+                            {t("edit")}
+                          </>
+                        )}
                       </Link>
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    disabled={!activeMedications?.results?.length}
-                    size="sm"
-                    className="text-gray-950 hover:text-gray-700 h-9"
-                  >
-                    <Link href={`prescriptions/print`}>
-                      <CareIcon icon="l-print" className="mr-2" />
-                      {t("print")}
-                    </Link>
-                  </Button>
+                  {facilityIdExists && (
+                    <Button
+                      variant="outline"
+                      disabled={!activeMedications?.results?.length}
+                      size="sm"
+                      className="text-gray-950 hover:text-gray-700 h-9"
+                    >
+                      <Link href={`../${encounterId}/prescriptions/print`}>
+                        <CareIcon icon="l-print" className="mr-2" />
+                        {t("print")}
+                      </Link>
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -250,12 +263,20 @@ export default function MedicationRequestTable({
             </div>
           </TabsContent>
 
+          <TabsContent value="ongoing">
+            <MedicationStatementList
+              patientId={patientId}
+              canAccess={canAccess}
+              encounterId={encounterId}
+            />
+          </TabsContent>
+
           <TabsContent value="administration">
             <AdministrationTab
               patientId={patientId}
-              encounterId={encounter.id}
-              canAccess={canAccess}
+              encounterId={encounterId}
               canWrite={canWrite}
+              canAccess={canAccess}
             />
           </TabsContent>
         </Tabs>

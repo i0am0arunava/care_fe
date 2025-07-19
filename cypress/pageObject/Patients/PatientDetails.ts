@@ -5,11 +5,14 @@ export class PatientDetails {
   }
 
   clickAssignUserButton() {
+    cy.intercept("GET", "**/api/v1/users/**").as("getUsers");
     cy.verifyAndClickElement('[data-cy="assign-user-button"]', "Assign User");
+    cy.wait("@getUsers").its("response.statusCode").should("eq", 200);
     return this;
   }
 
   selectUserToAssign(username: string) {
+    cy.wait(1000);
     cy.typeAndSelectOption(
       '[data-cy="patient-user-selector-container"]',
       username,
@@ -33,6 +36,7 @@ export class PatientDetails {
 
   verifyUserAssignmentSuccess() {
     cy.verifyNotification("User added to patient successfully");
+    cy.wait(1000);
     return this;
   }
 

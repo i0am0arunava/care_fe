@@ -1,8 +1,9 @@
 import { CaretDownIcon } from "@radix-ui/react-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { CheckIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useInView } from "react-intersection-observer";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,7 @@ import { Avatar } from "@/components/Common/Avatar";
 import routes from "@/Utils/request/api";
 import query from "@/Utils/request/query";
 import { formatName } from "@/Utils/utils";
+import facilityOrganizationApi from "@/types/facilityOrganization/facilityOrganizationApi";
 import { UserBase } from "@/types/user/user";
 import UserApi from "@/types/user/userApi";
 
@@ -35,7 +37,10 @@ interface Props {
   noOptionsMessage?: string;
   popoverClassName?: string;
   facilityId?: string;
+  organizationId?: string;
 }
+
+const PAGE_LIMIT = 50;
 
 export default function UserSelector({
   selected,
@@ -44,25 +49,62 @@ export default function UserSelector({
   noOptionsMessage,
   popoverClassName,
   facilityId,
+  organizationId,
 }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const { ref, inView } = useInView();
 
-  const { data, isFetching } = useQuery({
-    queryKey: ["users", search, facilityId],
-    queryFn: query.debounced(
-      facilityId ? routes.facility.getUsers : UserApi.list,
-      {
-        pathParams: facilityId ? { facility_id: facilityId } : undefined,
-        queryParams: {
-          search_text: search,
-        },
-      },
-    ),
+  const getPathParams = () => {
+    if (!facilityId) return undefined;
+    return organizationId
+      ? { facilityId, organizationId }
+      : { facility_id: facilityId };
+  };
+
+  const getQueryParams = (pageParam: number) => ({
+    limit: String(PAGE_LIMIT),
+    offset: String(pageParam),
+    search_text: search,
   });
 
-  const usersList = data?.results || [];
+  const {
+    data: usersList,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetching,
+  } = useInfiniteQuery({
+    queryKey: ["users", facilityId, search, organizationId],
+    queryFn: async ({ pageParam = 0, signal }) => {
+      const response = await query.debounced(
+        facilityId
+          ? organizationId
+            ? facilityOrganizationApi.listUsers
+            : routes.facility.getUsers
+          : UserApi.list,
+        {
+          pathParams: getPathParams(),
+          queryParams: getQueryParams(pageParam),
+        },
+      )({ signal });
+      return response;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const currentOffset = allPages.length * PAGE_LIMIT;
+      return currentOffset < lastPage.count ? currentOffset : null;
+    },
+    select: (data) =>
+      data?.pages.flatMap((p) =>
+        p.results.map((u) => ("user" in u ? u.user : u)),
+      ) || [],
+  });
+
+  useEffect(() => {
+    if (inView && hasNextPage) fetchNextPage();
+  }, [inView, hasNextPage, fetchNextPage]);
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={true}>
@@ -71,6 +113,7 @@ export default function UserSelector({
           variant="outline"
           role="combobox"
           className="min-w-60 w-full justify-start"
+          data-cy="select-assigned-user"
         >
           {selected ? (
             <div className="flex items-center gap-2">
@@ -96,7 +139,7 @@ export default function UserSelector({
         align="start"
         sideOffset={4}
       >
-        <Command filter={() => 1}>
+        <Command>
           <CommandInput
             placeholder={t("search")}
             onValueChange={setSearch}
@@ -109,15 +152,16 @@ export default function UserSelector({
                 : noOptionsMessage || t("no_results")}
             </CommandEmpty>
             <CommandGroup>
-              {usersList.map((user: UserBase) => (
+              {usersList?.map((user: UserBase, i) => (
                 <CommandItem
                   key={user.id}
-                  value={user.id}
+                  value={`${formatName(user)} ${user.username ?? ""}`}
                   onSelect={() => {
                     onChange(user);
                     setOpen(false);
                   }}
                   className="cursor-pointer w-full"
+                  ref={i === usersList.length - 1 ? ref : undefined}
                 >
                   <div className="flex items-center gap-2 w-full">
                     <Avatar
@@ -142,6 +186,9 @@ export default function UserSelector({
                   </div>
                 </CommandItem>
               ))}
+              {isFetchingNextPage && (
+                <div className="text-center text-sm py-2">{t("loading")}</div>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

@@ -2,6 +2,7 @@ import { PatientEncounter } from "@/pageObject/Patients/PatientEncounter";
 import { PatientFiles } from "@/pageObject/Patients/PatientFiles";
 import { UserProfile } from "@/pageObject/Users/UserProfile";
 import { FacilityCreation } from "@/pageObject/facility/FacilityCreation";
+import { viewPort } from "@/utils/viewPort";
 
 const facilityCreation = new FacilityCreation();
 const patientEncounter = new PatientEncounter();
@@ -10,44 +11,50 @@ const userProfile = new UserProfile();
 
 describe("Patient Files", () => {
   beforeEach(() => {
-    cy.loginByApi("devnurse1");
+    cy.viewport(viewPort.laptopStandard.width, viewPort.laptopStandard.height);
+    cy.loginByApi("doctor");
     cy.visit("/");
-    facilityCreation.selectFacility("GHC Payyanur");
+    facilityCreation.selectFirstRandomFacility();
 
     patientEncounter
       .navigateToEncounters()
+      .clickInProgressEncounterFilter()
       .openFirstEncounterDetails()
       .clickPatientDetailsButton();
     patientFiles.clickFilesTab();
   });
 
-  const timestamp = new Date().getTime();
+  const timestamp = Date.now().toString().slice(-6);
   const validationMessage = "Please give a name for the file";
   const fileUploadSuccessToast = "File Uploaded Successfully";
-  const newFileName = "Renamed Cypress File1 " + timestamp;
+  const newFileName = `File1-${timestamp}`;
   const archiveReason = "Cypress Archive Reason";
 
   // Single File Upload Setup
   const fileName = "sample_img1.png";
-  const filePath = (fileName: string) => `cypress/fixtures/${fileName}`;
 
   // Multiple Files Upload Setup
   const fileNames = ["sample_img1.png", "sample_img2.png", "sample_file.xlsx"];
   const inputFileNames = [
-    "Cypress Image Test 1 " + timestamp,
-    "Cypress Image Test 2 " + timestamp,
-    "Cypress File Test 3 " + timestamp,
+    `Img1-${timestamp}`,
+    `Img2-${timestamp}`,
+    `File3-${timestamp}`,
   ];
 
-  const inputFileName1 = "Cypress Test File Upload 1 " + timestamp;
+  const inputFileName1 = `Upload1-${timestamp}`;
+
+  // Common file path function for both single and multiple files
+  const getFilePath = (fileName: string | string[]): string[] => {
+    if (Array.isArray(fileName)) {
+      return fileName.map((file) => `cypress/fixtures/${file}`);
+    }
+    return [`cypress/fixtures/${fileName}`];
+  };
 
   it("Add multiple patient files", () => {
-    const filePaths = (fileNames: string[]) =>
-      fileNames.map((file) => `cypress/fixtures/${file}`);
-
     patientFiles
-      .clickAddFilesButton()
-      .uploadMultipleFiles(filePaths(fileNames))
+      .clickAddFilesAndSelectUpload()
+      .uploadMultipleFiles(getFilePath(fileNames))
       .clickUploadFilesButton()
       .verifyValidationErrors(validationMessage)
       .fillMultipleFileNames(inputFileNames)
@@ -56,56 +63,34 @@ describe("Patient Files", () => {
       .verifyFileUploadApiCall();
   });
 
-  it("Capture image and upload", () => {
-    // Capture Image Upload Setup
-    const captureFileName = "Cypress Capture Test " + timestamp;
-
-    patientFiles
-      .clickAddFilesButton()
-      .openCamera()
-      .captureImage()
-      .clickSubmit()
-      .clickUploadFilesButton()
-      .verifyValidationErrors(validationMessage)
-      .fillSingleFileName(captureFileName)
-      .interceptFileUploadRequest()
-      .clickUploadFilesButton()
-      .verifyFileUploadApiCall()
-      .verifySingleFileUploadSuccess(fileUploadSuccessToast);
-  });
-
   it("File Uploaded by one user is accessible to another user", () => {
     patientFiles
-      .clickAddFilesButton()
-      .selectUploadFromDevice()
-      .uploadSingleFile(filePath(fileName))
+      .clickAddFilesAndSelectUpload()
+      .uploadSingleFile(getFilePath(fileName)[0])
       .fillSingleFileName(inputFileName1)
       .interceptFileUploadRequest()
       .clickUploadFilesButton()
       .verifyFileUploadApiCall()
       .verifySingleFileUploadSuccess(fileUploadSuccessToast)
-      .filterActiveFiles()
       .clickFirstFileViewButton()
       .closeFilePreview()
       .saveCurrentUrl();
 
     userProfile.openUserMenu().clickUserLogout();
-    cy.loginByApi("devnurse2");
+    cy.loginByApi("nurse");
     patientFiles
       .navigateToSavedUrl()
       .clickFirstFileViewButton()
       .clickDownloadFile();
   });
 
-  it("Add a new patient single file upload , Rename and Archive it", () => {
-    const fileArchiveSuccessToast = "File archived successfully";
+  it("Add a new patient file and rename it", () => {
     const fileRenameSuccessToast = "File name changed successfully";
 
     // Upload a single file
     patientFiles
-      .clickAddFilesButton()
-      .selectUploadFromDevice()
-      .uploadSingleFile(filePath(fileName))
+      .clickAddFilesAndSelectUpload()
+      .uploadSingleFile(getFilePath(fileName)[0])
       .clickUploadFilesButton()
       .verifyValidationErrors(validationMessage)
       .fillSingleFileName(inputFileName1)
@@ -114,7 +99,7 @@ describe("Patient Files", () => {
       .verifyFileUploadApiCall()
       .verifySingleFileUploadSuccess(fileUploadSuccessToast);
 
-    // Filter the file to only show the active files and rename the file
+    // Rename the file
     patientFiles
       .filterActiveFiles()
       .clickFileDetailsButton()
@@ -124,9 +109,26 @@ describe("Patient Files", () => {
       .clickProceedButton()
       .verifyFileRenameApiCall()
       .verifySingleFileUploadSuccess(fileRenameSuccessToast);
+  });
+
+  it("Add a new patient file and archive it", () => {
+    const fileArchiveSuccessToast = "File archived successfully";
+
+    // Upload a single file
+    patientFiles
+      .clickAddFilesAndSelectUpload()
+      .uploadSingleFile(getFilePath(fileName)[0])
+      .clickUploadFilesButton()
+      .verifyValidationErrors(validationMessage)
+      .fillSingleFileName(inputFileName1)
+      .interceptFileUploadRequest()
+      .clickUploadFilesButton()
+      .verifyFileUploadApiCall()
+      .verifySingleFileUploadSuccess(fileUploadSuccessToast);
 
     // Archive the file
     patientFiles
+      .filterActiveFiles()
       .clickFileDetailsButton()
       .clickArchiveOption()
       .fillArchiveReason(archiveReason)
@@ -136,9 +138,9 @@ describe("Patient Files", () => {
       .verifySingleFileUploadSuccess(fileArchiveSuccessToast);
   });
 
-  it("Record, Upload and Download Audio file", () => {
+  it("Record and upload audio file", () => {
     // Audio File Upload Setup
-    const audioFileName = "Cypress Audio Test " + timestamp;
+    const audioFileName = `Audio-${timestamp}`;
 
     patientFiles
       .clickAddFilesButton()

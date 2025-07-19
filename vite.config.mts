@@ -15,6 +15,7 @@ import { VitePWA } from "vite-plugin-pwa";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 import { z } from "zod";
 
+import { careConsoleArt } from "./plugins/careConsoleArt";
 import { treeShakeCareIcons } from "./plugins/treeShakeCareIcons";
 
 const pdfWorkerPath = path.join(
@@ -169,6 +170,7 @@ export default defineConfig(({ mode }) => {
       ),
     },
     plugins: [
+      careConsoleArt(),
       tailwindcss(),
       federation({
         name: "core",
@@ -297,6 +299,15 @@ export default defineConfig(({ mode }) => {
       port: 4000,
       host: "0.0.0.0",
       allowedHosts: true,
+      headers: {
+        "Strict-Transport-Security":
+          "max-age=31536000; includeSubDomains; preload",
+        "X-XSS-Protection": "1; mode=block",
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "geolocation=(self), microphone=(self)",
+      },
     },
     preview: {
       headers: {

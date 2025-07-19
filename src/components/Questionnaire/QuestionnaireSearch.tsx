@@ -1,5 +1,6 @@
 import { CaretSortIcon } from "@radix-ui/react-icons";
 import { useQuery } from "@tanstack/react-query";
+import { navigate } from "raviger";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -19,7 +20,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import useBreakpoints from "@/hooks/useBreakpoints";
@@ -31,19 +37,16 @@ import questionnaireApi from "@/types/questionnaire/questionnaireApi";
 
 interface QuestionnaireSearchProps {
   placeholder?: string;
-  onSelect: (questionnaire: QuestionnaireDetail) => void;
+  onSelect?: (questionnaire: QuestionnaireDetail) => void;
   subjectType?: string;
   disabled?: boolean;
-}
-
-interface QuestionnaireListResponse {
-  results: QuestionnaireDetail[];
-  count: number;
+  size?: React.ComponentProps<typeof Button>["size"];
 }
 
 export function QuestionnaireSearch({
   placeholder,
-  onSelect,
+  size = "default",
+  onSelect = (selected) => navigate(`questionnaire/${selected.slug}`),
   subjectType,
   disabled,
 }: QuestionnaireSearchProps) {
@@ -52,19 +55,19 @@ export function QuestionnaireSearch({
   const [search, setSearch] = useState("");
   const isMobile = useBreakpoints({ default: true, sm: false });
 
-  const { data: questionnaires, isLoading } =
-    useQuery<QuestionnaireListResponse>({
-      queryKey: ["questionnaires", "list", search, subjectType],
-      queryFn: query.debounced(questionnaireApi.list, {
-        queryParams: {
-          title: search,
-          ...conditionalAttribute(!!subjectType, {
-            subject_type: subjectType,
-          }),
-          status: "active",
-        },
-      }),
-    });
+  const { data: questionnaires, isLoading } = useQuery({
+    queryKey: ["questionnaires", "list", search, subjectType],
+    queryFn: query.debounced(questionnaireApi.list, {
+      queryParams: {
+        title: search,
+        ...conditionalAttribute(!!subjectType, {
+          subject_type: subjectType,
+        }),
+        status: "active",
+      },
+    }),
+    enabled: isOpen,
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -120,7 +123,6 @@ export function QuestionnaireSearch({
             data-cy="add-questionnaire-button"
             variant="outline"
             role="combobox"
-            className="w-full justify-between"
             disabled={disabled || isLoading}
           >
             {isLoading ? (
@@ -137,10 +139,12 @@ export function QuestionnaireSearch({
             <CaretSortIcon className="ml-2 size-4 shrink-0 opacity-50" />
           </Button>
         </SheetTrigger>
+
         <SheetContent
           side="bottom"
           className="h-[50vh] px-0 pt-2 pb-0 rounded-t-lg"
         >
+          <SheetTitle className="sr-only">{t("questionnaire")}</SheetTitle>
           <div className="absolute inset-x-0 top-0 h-1.5 w-12 mx-auto rounded-full bg-gray-300 mt-2" />
           <div className="mt-6 h-full">{content}</div>
         </SheetContent>
@@ -152,6 +156,7 @@ export function QuestionnaireSearch({
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button
+          size={size}
           data-cy="add-questionnaire-button"
           variant="outline"
           role="combobox"

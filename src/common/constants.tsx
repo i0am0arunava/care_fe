@@ -9,7 +9,7 @@ import {
 
 import { IconName } from "@/CAREUI/icons/CareIcon";
 
-import { EncounterClass } from "@/types/emr/encounter";
+import { EncounterClass } from "@/types/emr/encounter/encounter";
 
 export const RESULTS_PER_PAGE_LIMIT = 14;
 
@@ -69,7 +69,8 @@ export const FACILITY_TYPES: Array<OptionsType> = [
   // { id: 1200, text: "Second Line Treatment Center" },
   // { id: 1400, text: "Covid Management Center" },
   // { id: 1600, text: "District War Room" },
-  { id: 3000, text: "Non Governmental Organization" },
+  { id: 3000, text: "Clinical Non Governmental Organization" },
+  { id: 3001, text: "Non Clinical Non Governmental Organization" },
   { id: 4000, text: "Community Based Organization" },
 ];
 
@@ -386,10 +387,37 @@ export const FILE_EXTENSIONS = {
     "qt",
     "flv",
     "swf",
+    "mkv",
   ],
   PRESENTATION: ["pptx"],
   DOCUMENT: ["pdf", "docx"],
 } as const;
+
+export const getVideoMimeType = (extension: string): string => {
+  const mimeTypes: Record<string, string> = {
+    mp4: "video/mp4",
+    webm: "video/webm",
+    avi: "video/x-msvideo",
+    mov: "video/quicktime",
+    mkv: "video/x-matroska",
+    flv: "video/x-flv",
+    mpg: "video/mpeg",
+    mp2: "video/mpeg",
+    mpeg: "video/mpeg",
+    mpe: "video/mpeg",
+    mpv: "video/mpeg",
+    ogg: "video/ogg",
+    swf: "video/x-shockwave-flash",
+    wmv: "video/x-ms-wmv",
+    m4v: "video/mp4",
+    m4a: "audio/mp4",
+    m4b: "audio/mp4",
+    m4p: "audio/mp4",
+  };
+
+  return mimeTypes[extension] || `video/${extension}`;
+};
+
 export const encounterIcons = {
   imp: <BedDouble />,
   amb: <Ambulance />,
@@ -403,13 +431,12 @@ export const PREVIEWABLE_FILE_EXTENSIONS = [
   "html",
   "htm",
   "pdf",
-  "mp4",
-  "webm",
   "jpg",
   "jpeg",
   "png",
   "gif",
   "webp",
+  ...FILE_EXTENSIONS.VIDEO,
 ] as const;
 
 export const NAME_PREFIXES = ["Dr.", "Mr.", "Mrs.", "Ms.", "Miss", "Prof."];

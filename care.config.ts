@@ -1,6 +1,6 @@
 import { CountryCode } from "libphonenumber-js/types.cjs";
 
-import { EncounterClass } from "@/types/emr/encounter";
+import { EncounterClass } from "@/types/emr/encounter/encounter";
 
 const env = import.meta.env;
 
@@ -59,9 +59,6 @@ const careConfig = {
     env.REACT_MAPS_FALLBACK_URL_TEMPLATE ||
     "https://www.openstreetmap.org/?mlat={lat}&mlon={long}&zoom=15",
 
-  gmapsApiKey:
-    env.REACT_GMAPS_API_KEY || "AIzaSyDsBAc3y7deI5ZO3NtK5GuzKwtUzQNJNUk",
-
   reCaptchaSiteKey: env.REACT_RECAPTCHA_SITE_KEY,
 
   auth: {
@@ -80,14 +77,6 @@ const careConfig = {
     environment: env.REACT_SENTRY_ENVIRONMENT || "staging",
   },
 
-  hcx: {
-    enabled: boolean("REACT_ENABLE_HCX"),
-  },
-
-  abdm: {
-    enabled: boolean("REACT_ENABLE_ABDM", true),
-  },
-
   appointments: {
     /**
      * Relative number of days to show in the appointments page by default.
@@ -103,6 +92,11 @@ const careConfig = {
       true,
     ),
   },
+
+  enableMinimalPatientRegistration: boolean(
+    "REACT_ENABLE_MINIMAL_PATIENT_REGISTRATION",
+    false,
+  ),
 
   careApps: env.REACT_ENABLED_APPS
     ? env.REACT_ENABLED_APPS.split(",").map((app) => {
@@ -135,11 +129,18 @@ const careConfig = {
   plotsConfigUrl:
     env.REACT_OBSERVATION_PLOTS_CONFIG_URL || "/config/plots.json",
 
-  defaultCountry: (env.REACT_DEFAULT_COUNTRY || "IN") as CountryCode,
+  defaultCountry: {
+    code: (env.REACT_DEFAULT_COUNTRY || "IN") as CountryCode,
+    name: env.REACT_DEFAULT_COUNTRY_NAME || "India",
+  },
 
   resendOtpTimeout: env.REACT_APP_RESEND_OTP_TIMEOUT
     ? parseInt(env.REACT_APP_RESEND_OTP_TIMEOUT, 10)
     : 30,
+
+  imageUploadMaxSizeInMB: env.REACT_APP_MAX_IMAGE_UPLOAD_SIZE_MB
+    ? parseInt(env.REACT_APP_MAX_IMAGE_UPLOAD_SIZE_MB, 10)
+    : 2,
 } as const;
 
 export default careConfig;

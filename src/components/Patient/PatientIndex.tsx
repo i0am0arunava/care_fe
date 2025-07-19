@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/table";
 
 import Loading from "@/components/Common/Loading";
-import SearchByMultipleFields from "@/components/Common/SearchByMultipleFields";
+import SearchInput from "@/components/Common/SearchInput";
 
 import { getPermissions } from "@/common/Permissions";
 import { GENDER_TYPES } from "@/common/constants";
@@ -41,28 +41,29 @@ import { GENDER_TYPES } from "@/common/constants";
 import routes from "@/Utils/request/api";
 import query from "@/Utils/request/query";
 import { usePermissions } from "@/context/PermissionContext";
-import { PartialPatientModel } from "@/types/emr/newPatient";
+import useCurrentFacility from "@/pages/Facility/utils/useCurrentFacility";
+import {
+  PartialPatientModel,
+  Patient,
+  getPartialId,
+} from "@/types/emr/patient/patient";
 
 export default function PatientIndex({ facilityId }: { facilityId: string }) {
   const [{ phone_number: phoneNumber = "" }, setPhoneNumberQuery] =
     useQueryParams();
   const [yearOfBirth, setYearOfBirth] = useState("");
-  const [selectedPatient, setSelectedPatient] =
-    useState<PartialPatientModel | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<
+    PartialPatientModel | Patient | null
+  >(null);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const { t } = useTranslation();
   const { hasPermission } = usePermissions();
 
-  const { data: facilityData } = useQuery({
-    queryKey: ["facility", facilityId],
-    queryFn: query(routes.getPermittedFacility, {
-      pathParams: { id: facilityId },
-    }),
-  });
+  const { facility } = useCurrentFacility();
 
   const { canCreatePatient } = getPermissions(
     hasPermission,
-    facilityData?.permissions ?? [],
+    facility?.permissions ?? [],
   );
 
   const handleCreatePatient = useCallback(() => {
@@ -101,37 +102,77 @@ export default function PatientIndex({ facilityId }: { facilityId: string }) {
     );
   }
 
+  // Build search options
+  const identifierOptions =
+    facility?.patient_instance_identifier_configs?.map((c) => ({
+      key: c.id,
+      type: "text" as const,
+      placeholder: t("search_by_identifier", { name: c.config.display }),
+      value: "",
+      display: c.config.display,
+    })) || [];
+
   const searchOptions = [
     {
       key: "phone_number",
       type: "phone" as const,
       placeholder: t("search_by_phone_number"),
       value: phoneNumber,
+      display: t("phone_number"),
     },
+    ...identifierOptions,
   ];
+
+  // Track identifier search state
+  const [identifierSearch, setIdentifierSearch] = useState<{
+    config?: string;
+    value?: string;
+  }>({});
 
   const handleSearch = useCallback((key: string, value: string) => {
     if (key === "phone_number") {
       setPhoneNumberQuery({
         phone_number: isValidPhoneNumber(value) || value === "" ? value : null,
       });
+      setIdentifierSearch({});
+    } else {
+      setPhoneNumberQuery({ phone_number: "" });
+      setIdentifierSearch({ config: key, value });
     }
   }, []);
 
   const { data: patientList, isFetching } = useQuery({
-    queryKey: ["patient-search", facilityId, phoneNumber],
+    queryKey: ["patient-search", facilityId, phoneNumber, identifierSearch],
     queryFn: query.debounced(routes.searchPatient, {
-      body: {
-        phone_number: phoneNumber,
-      },
+      body: phoneNumber
+        ? { phone_number: phoneNumber }
+        : identifierSearch.config && identifierSearch.value
+          ? { config: identifierSearch.config, value: identifierSearch.value }
+          : {},
     }),
-    enabled: !!isValidPhoneNumber(phoneNumber),
+    enabled:
+      (!!isValidPhoneNumber(phoneNumber) && !!phoneNumber) ||
+      (!!identifierSearch.config && !!identifierSearch.value),
   });
 
-  const handlePatientSelect = (patient: PartialPatientModel) => {
-    setSelectedPatient(patient);
-    setVerificationOpen(true);
-    setYearOfBirth("");
+  const handlePatientSelect = (index: number) => {
+    const patient = patientList?.results[index];
+    if (!patient) {
+      return;
+    }
+    if (patientList && patientList.partial) {
+      setSelectedPatient(patient);
+      setVerificationOpen(true);
+      setYearOfBirth("");
+    } else {
+      navigate(`/facility/${facilityId}/patients/verify`, {
+        query: {
+          phone_number: patient.phone_number,
+          year_of_birth: (patient as Patient).year_of_birth.toString(),
+          partial_id: (patient as Patient).id.slice(0, 5),
+        },
+      });
+    }
   };
 
   const handleVerify = () => {
@@ -144,7 +185,7 @@ export default function PatientIndex({ facilityId }: { facilityId: string }) {
       query: {
         phone_number: selectedPatient.phone_number,
         year_of_birth: yearOfBirth,
-        partial_id: selectedPatient.partial_id,
+        partial_id: getPartialId(selectedPatient),
       },
     });
   };
@@ -171,9 +212,8 @@ export default function PatientIndex({ facilityId }: { facilityId: string }) {
 
           <div>
             <div className="space-y-6">
-              <SearchByMultipleFields
-                initialOptionIndex={0}
-                id="patient-search"
+              <SearchInput
+                data-cy="patient-search"
                 options={searchOptions}
                 onSearch={handleSearch}
                 className="w-full"
@@ -181,7 +221,8 @@ export default function PatientIndex({ facilityId }: { facilityId: string }) {
               />
 
               <div className="min-h-[200px]" id="patient-search-results">
-                {!!phoneNumber && (
+                {(!!phoneNumber ||
+                  (!!identifierSearch.config && !!identifierSearch.value)) && (
                   <>
                     {isFetching || !patientList ? (
                       <div className="flex items-center justify-center h-[200px]">
@@ -212,11 +253,11 @@ export default function PatientIndex({ facilityId }: { facilityId: string }) {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {patientList.results.map((patient) => (
+                            {patientList.results.map((patient, index) => (
                               <TableRow
                                 key={patient.id}
-                                className="cursor-pointer hover:bg-muted/50"
-                                onClick={() => handlePatientSelect(patient)}
+                                className="cursor-pointer"
+                                onClick={() => handlePatientSelect(index)}
                               >
                                 <TableCell className="font-medium">
                                   {patient.name}

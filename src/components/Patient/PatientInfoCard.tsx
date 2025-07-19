@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BedSingle,
   Building,
@@ -6,10 +7,9 @@ import {
   CircleDashed,
   Clock,
   Droplet,
-  SignatureIcon,
   UserRound,
 } from "lucide-react";
-import { Link } from "raviger";
+import { Link, usePathParams } from "raviger";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
@@ -31,11 +31,12 @@ import {
 
 import { CareTeamSheet } from "@/components/CareTeam/CareTeamSheet";
 import { Avatar } from "@/components/Common/Avatar";
-import { ConsentSheet } from "@/components/Consent/ConsentSheet";
 import EncounterActions from "@/components/Encounter/EncounterActions";
 import { LocationSheet } from "@/components/Location/LocationSheet";
 import { LocationTree } from "@/components/Location/LocationTree";
+import { AccountSheetButton } from "@/components/Patient/AccountSheet";
 import LinkDepartmentsSheet from "@/components/Patient/LinkDepartmentsSheet";
+import TagAssignmentSheet from "@/components/Tags/TagAssignmentSheet";
 
 import { PLUGIN_Component } from "@/PluginEngine";
 import dayjs from "@/Utils/dayjs";
@@ -44,8 +45,8 @@ import {
   Encounter,
   completedEncounterStatus,
   inactiveEncounterStatus,
-} from "@/types/emr/encounter";
-import { Patient } from "@/types/emr/newPatient";
+} from "@/types/emr/encounter/encounter";
+import { Patient } from "@/types/emr/patient/patient";
 import { FacilityOrganization } from "@/types/facilityOrganization/facilityOrganization";
 
 export interface PatientInfoCardProps {
@@ -58,7 +59,15 @@ export interface PatientInfoCardProps {
 
 export default function PatientInfoCard(props: PatientInfoCardProps) {
   const { patient, encounter, canWrite, disableButtons = false } = props;
+  const subpathMatch = usePathParams("/facility/:facilityId/*");
+  const facilityIdExists = !!subpathMatch?.facilityId;
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const handleTagsUpdate = () => {
+    // Refresh the patient data to get updated tags
+    queryClient.invalidateQueries({ queryKey: ["encounter", encounter.id] });
+  };
 
   return (
     <>
@@ -180,33 +189,32 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
                   </div>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm sm:flex-row mt-2">
+
+              <div className="mt-3 w-full flex flex-col gap-3 sm:flex-row">
                 <div
                   className="flex w-full flex-wrap items-center justify-start gap-2 text-sm text-secondary-900 sm:flex-row sm:text-sm md:pr-10 lg:justify-normal"
                   id="patient-consultationbadges"
                 >
                   <Popover>
                     <PopoverTrigger asChild>
-                      <div>
-                        <Badge
-                          className="capitalize gap-1 py-1 px-2 cursor-pointer hover:bg-secondary-100"
-                          variant="outline"
-                          title={`Encounter Status: ${t(`encounter_status__${props.encounter.status}`)}`}
-                        >
-                          {completedEncounterStatus.includes(
-                            props.encounter.status,
-                          ) ? (
-                            <CircleCheck
-                              className="size-4 text-green-300"
-                              fill="green"
-                            />
-                          ) : (
-                            <CircleDashed className="size-4 text-yellow-500" />
-                          )}
-                          {t(`encounter_status__${props.encounter.status}`)}
-                          <ChevronDown className="size-3 opacity-50" />
-                        </Badge>
-                      </div>
+                      <Badge
+                        className="capitalize gap-1 py-1 px-3 cursor-pointer hover:bg-secondary-100"
+                        variant="outline"
+                        title={`Encounter Status: ${t(`encounter_status__${props.encounter.status}`)}`}
+                      >
+                        {completedEncounterStatus.includes(
+                          props.encounter.status,
+                        ) || props.encounter.status === "discharged" ? (
+                          <CircleCheck
+                            className="size-4 text-green-300"
+                            fill="green"
+                          />
+                        ) : (
+                          <CircleDashed className="size-4 text-yellow-500" />
+                        )}
+                        {t(`encounter_status__${props.encounter.status}`)}
+                        <ChevronDown className="size-3 opacity-50" />
+                      </Badge>
                     </PopoverTrigger>
                     <PopoverContent align={"start"} className="w-auto p-2">
                       <div className="space-y-2">
@@ -234,22 +242,20 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
 
                   <Popover>
                     <PopoverTrigger asChild>
-                      <div>
-                        <Badge
-                          className="capitalize gap-1 py-1 px-2 cursor-pointer hover:bg-secondary-100"
-                          variant="outline"
-                          title={`Encounter Class: ${props.encounter.encounter_class}`}
-                        >
-                          <BedSingle
-                            className="size-4 text-blue-400"
-                            fill="#93C5FD"
-                          />
-                          {t(
-                            `encounter_class__${props.encounter.encounter_class}`,
-                          )}
-                          <ChevronDown className="size-3 opacity-50" />
-                        </Badge>
-                      </div>
+                      <Badge
+                        className="capitalize gap-1 py-1 cursor-pointer hover:bg-secondary-100"
+                        variant="outline"
+                        title={`Encounter Class: ${props.encounter.encounter_class}`}
+                      >
+                        <BedSingle
+                          className="size-4 text-blue-400"
+                          fill="#93C5FD"
+                        />
+                        {t(
+                          `encounter_class__${props.encounter.encounter_class}`,
+                        )}
+                        <ChevronDown className="size-3 opacity-50" />
+                      </Badge>
                     </PopoverTrigger>
                     <PopoverContent align={"end"} className="w-auto p-2">
                       <div className="space-y-2">
@@ -275,7 +281,7 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
                     </PopoverContent>
                   </Popover>
                   <Badge
-                    className="capitalize gap-1 py-1 px-2"
+                    className="capitalize gap-1 py-1 px-3"
                     variant="outline"
                     title={`Priority: ${t(
                       `encounter_priority__${props.encounter.priority.toLowerCase()}`,
@@ -289,7 +295,7 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
 
                   {patient.blood_group && (
                     <Badge
-                      className="capitalize gap-1 py-1 px-2"
+                      className="capitalize gap-1 py-1 px-3"
                       variant="outline"
                       title={`Blood Group: ${patient.blood_group?.replace("_", " ")}`}
                     >
@@ -325,17 +331,20 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
                       currentOrganizations={encounter.organizations}
                       facilityId={encounter.facility.id}
                       trigger={
-                        <div className="flex flex-wrap gap-2">
+                        <div
+                          className="flex flex-wrap gap-2"
+                          data-cy="add-organization-badge"
+                        >
                           {encounter.organizations.map((org) =>
                             organizationBadge(org),
                           )}
                           {encounter.organizations.length === 0 && (
                             <Badge
-                              className="capitalize gap-1 py-1 px-2 cursor-pointer hover:bg-secondary-100"
+                              className="capitalize gap-1 py-1 px-3 cursor-pointer hover:bg-secondary-100"
                               variant="outline"
                             >
                               <Building className="size-4 text-blue-400" />
-                              Add Organizations
+                              {t("add_organization_other")}
                             </Badge>
                           )}
                         </div>
@@ -353,21 +362,19 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
                   {props.encounter.current_location ? (
                     <Popover>
                       <PopoverTrigger asChild>
-                        <div>
-                          <Badge
-                            className="capitalize gap-1 py-1 px-2 cursor-pointer hover:bg-secondary-100"
-                            variant="outline"
-                            title={`Current Location: ${props.encounter.current_location.name}`}
-                            data-cy="current-location-badge"
-                          >
-                            <CareIcon
-                              icon="l-location-point"
-                              className="size-4 text-green-600"
-                            />
-                            {props.encounter.current_location.name}
-                            <ChevronDown className="size-3 opacity-50" />
-                          </Badge>
-                        </div>
+                        <Badge
+                          className="capitalize gap-1 py-1 px-3 cursor-pointer hover:bg-secondary-100"
+                          variant="outline"
+                          title={`Current Location: ${props.encounter.current_location.name}`}
+                          data-cy="current-location-badge"
+                        >
+                          <CareIcon
+                            icon="l-location-point"
+                            className="size-4 text-green-600"
+                          />
+                          {props.encounter.current_location.name}
+                          <ChevronDown className="size-3 opacity-50" />
+                        </Badge>
                       </PopoverTrigger>
                       <PopoverContent align={"start"} className="w-auto p-2">
                         <div className="space-y-2 p-2 items-center">
@@ -421,7 +428,7 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
                       </PopoverContent>
                     </Popover>
                   ) : canWrite ? (
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="py-0.5 px-3">
                       <LocationSheet
                         facilityId={props.encounter.facility.id}
                         encounter={encounter}
@@ -443,67 +450,99 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
                   ) : (
                     <></>
                   )}
-                  <Badge variant="outline">
-                    <ConsentSheet
-                      patientId={props.encounter.patient.id}
-                      encounterId={props.encounter.id}
-                      trigger={
-                        <div className="flex items-center gap-1 text-gray-950 py-0.5 cursor-pointer hover:bg-secondary-100">
-                          <SignatureIcon className="size-4 text-green-600" />
-                          {t("manage_consents")}
-                        </div>
-                      }
-                    />
-                  </Badge>
-                  <Badge variant="outline">
+                  <Badge variant="outline" className="py-0.5 px-3">
                     <CareTeamSheet
                       encounter={encounter}
                       trigger={
                         <div className="flex items-center gap-1 text-gray-950 py-0.5 cursor-pointer hover:bg-secondary-100">
                           <UserRound className="size-4 text-green-600" />
-                          {t("manage_care_team")}
+                          {canWrite
+                            ? t("manage_care_team")
+                            : t("view_care_team")}
                         </div>
                       }
+                      canWrite={canWrite}
                     />
                   </Badge>
+                  <Badge variant="outline">
+                    <TagAssignmentSheet
+                      entityType="encounter"
+                      entityId={encounter.id}
+                      currentTags={encounter.tags || []}
+                      onUpdate={handleTagsUpdate}
+                      trigger={
+                        <div className="flex items-center gap-1 text-gray-950 py-0.5 cursor-pointer hover:bg-secondary-100 capitalize">
+                          <CareIcon
+                            icon="l-tag-alt"
+                            className="size-4 text-green-600"
+                          />
+                          {t("tags")}
+                        </div>
+                      }
+                      canWrite={canWrite}
+                    />
+                  </Badge>
+                  <Badge variant="outline">
+                    <AccountSheetButton
+                      encounter={encounter}
+                      trigger={
+                        <div className="flex items-center gap-1 text-gray-950 py-0.5 cursor-pointer hover:bg-secondary-100 capitalize">
+                          <CareIcon
+                            icon="l-wallet"
+                            className="size-4 text-green-600"
+                          />
+                          {t("account")}
+                        </div>
+                      }
+                      canWrite={canWrite}
+                    />
+                  </Badge>
+                </div>
+                <div
+                  className="flex flex-col items-center justify-end gap-4 px-4 py-1 2xl:flex-row"
+                  id="consultation-buttons"
+                >
+                  <PLUGIN_Component
+                    __name="PatientInfoCardQuickActions"
+                    encounter={encounter}
+                    className="w-full lg:w-auto bg-primary-700 text-white hover:bg-primary-600"
+                  />
+                  {!disableButtons && (
+                    <div
+                      className="flex w-full flex-col gap-3 sm:w-auto"
+                      data-cy="update-encounter-button"
+                    >
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="primary">
+                            {inactiveEncounterStatus.includes(
+                              encounter.status,
+                            ) || !facilityIdExists
+                              ? t("actions")
+                              : t("update")}
+                            <ChevronDown className="ml-2 size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="w-(--radix-dropdown-menu-trigger-width) sm:w-auto"
+                        >
+                          <EncounterActions
+                            encounter={encounter}
+                            layout="dropdown"
+                          />
+                          <PLUGIN_Component
+                            __name="PatientInfoCardActions"
+                            encounter={encounter}
+                          />
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
-        </div>
-        <div
-          className="flex flex-col mt-4 items-center justify-end gap-4 px-4 py-1 2xl:flex-row"
-          id="consultation-buttons"
-        >
-          <PLUGIN_Component
-            __name="PatientInfoCardQuickActions"
-            encounter={encounter}
-            className="w-full lg:w-auto bg-primary-700 text-white hover:bg-primary-600"
-          />
-          {!disableButtons && (
-            <div
-              className="flex w-full flex-col gap-3 lg:w-auto 2xl:flex-row"
-              data-cy="update-encounter-button"
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="primary">
-                    {inactiveEncounterStatus.includes(encounter.status)
-                      ? t("actions")
-                      : t("update")}
-                    <ChevronDown className="ml-2 size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <EncounterActions encounter={encounter} layout="dropdown" />
-                  <PLUGIN_Component
-                    __name="PatientInfoCardActions"
-                    encounter={encounter}
-                  />
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          )}
         </div>
       </section>
     </>
@@ -514,7 +553,7 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
       <Badge
         key={org.id}
         className={cn(
-          "capitalize gap-1 py-1 px-2 hover:bg-secondary-100 cursor-pointer",
+          "capitalize gap-1 py-1 px-3 hover:bg-secondary-100 cursor-pointer",
         )}
         variant="outline"
         title={`Organization: ${org.name}${org.description ? ` - ${org.description}` : ""}`}

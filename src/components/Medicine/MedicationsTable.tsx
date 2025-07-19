@@ -19,7 +19,8 @@ import {
   MEDICATION_REQUEST_TIMING_OPTIONS,
   MedicationRequestDosageInstruction,
   MedicationRequestRead,
-} from "@/types/emr/medicationRequest";
+  displayMedicationName,
+} from "@/types/emr/medicationRequest/medicationRequest";
 
 import { formatDosage, formatSig } from "./utils";
 
@@ -89,16 +90,18 @@ export const MedicationsTable = ({ medications }: MedicationsTableProps) => {
                 )}
               >
                 <TableCell className="py-2 px-3">
-                  {medication.medication?.display}
+                  {displayMedicationName(medication)}
                 </TableCell>
                 <TableCell className="py-2 px-3">{dosage}</TableCell>
                 <TableCell className="py-2 px-3">
                   {instruction?.as_needed_boolean
                     ? `${t("as_needed_prn")} (${instruction?.as_needed_for?.display})`
                     : frequency?.meaning}
-                  {instruction?.additional_instruction?.[0]?.display && (
-                    <div className="text-sm text-gray-600">
-                      {instruction.additional_instruction[0].display}
+                  {(instruction?.additional_instruction ?? []).length > 0 && (
+                    <div className="text-sm text-gray-600 space-y-1">
+                      {instruction.additional_instruction?.map(
+                        (item, index) => <div key={index}>{item.display}</div>,
+                      )}
                     </div>
                   )}
                 </TableCell>

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "raviger";
+import { Link, usePathParams } from "raviger";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -25,7 +25,10 @@ import { PLUGIN_Component } from "@/PluginEngine";
 import routes from "@/Utils/request/api";
 import mutate from "@/Utils/request/mutate";
 import { usePermissions } from "@/context/PermissionContext";
-import { Encounter, inactiveEncounterStatus } from "@/types/emr/encounter";
+import {
+  Encounter,
+  inactiveEncounterStatus,
+} from "@/types/emr/encounter/encounter";
 
 interface EncounterActionsProps {
   encounter: Encounter;
@@ -51,6 +54,7 @@ export default function EncounterActions({
     hasPermission,
     encounter.permissions,
   );
+  const organizationId = usePathParams("/organization/:organizationId/*");
   const canWrite =
     canWriteEncounter && !inactiveEncounterStatus.includes(encounter.status);
 
@@ -74,11 +78,17 @@ export default function EncounterActions({
       organizations: encounter.organizations.map((org) => org.id),
       patient: encounter.patient.id,
       encounter_class: encounter.encounter_class,
-      period: encounter.period,
+      period: {
+        start: encounter.period.start,
+        end: encounter.period.end
+          ? encounter.period.end
+          : new Date().toISOString(),
+      },
       hospitalization: encounter.hospitalization,
       priority: encounter.priority,
       external_identifier: encounter.external_identifier,
       facility: encounter.facility.id,
+      discharge_summary_advice: encounter.discharge_summary_advice,
     });
   };
 
@@ -92,7 +102,11 @@ export default function EncounterActions({
         <>
           <DropdownMenuItem asChild>
             <Link
-              href={`/facility/${encounter.facility.id}/patient/${encounter.patient.id}/encounter/${encounter.id}/treatment_summary`}
+              href={
+                organizationId
+                  ? `/organization/organizationId/patient/${encounter.patient.id}/encounter/${encounter.id}/treatment_summary`
+                  : `/facility/${encounter.facility.id}/patient/${encounter.patient.id}/encounter/${encounter.id}/treatment_summary`
+              }
             >
               {t("treatment_summary")}
             </Link>
@@ -105,10 +119,7 @@ export default function EncounterActions({
           {canWrite && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <DropdownMenuItem
-                  onSelect={(e) => e.preventDefault()}
-                  data-cy="mark-encounter-as-complete"
-                >
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   {t("mark_as_complete")}
                 </DropdownMenuItem>
               </AlertDialogTrigger>
@@ -130,7 +141,6 @@ export default function EncounterActions({
                   <AlertDialogAction
                     className={buttonVariants({ variant: "primary" })}
                     onClick={handleMarkAsComplete}
-                    data-cy="encounter-complete-dropdown"
                   >
                     {t("mark_as_complete")}
                   </AlertDialogAction>
@@ -151,7 +161,11 @@ export default function EncounterActions({
           asChild
         >
           <Link
-            href={`/facility/${encounter.facility.id}/patient/${encounter.patient.id}/encounter/${encounter.id}/treatment_summary`}
+            href={
+              organizationId
+                ? `/organization/organizationId/patient/${encounter.patient.id}/encounter/${encounter.id}/treatment_summary`
+                : `/facility/${encounter.facility.id}/patient/${encounter.patient.id}/encounter/${encounter.id}/treatment_summary`
+            }
           >
             {t("treatment_summary")}
           </Link>
