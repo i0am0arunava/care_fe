@@ -42,16 +42,16 @@ import { PLUGIN_Component } from "@/PluginEngine";
 import dayjs from "@/Utils/dayjs";
 import { formatDateTime, formatPatientAge } from "@/Utils/utils";
 import {
-  Encounter,
+  EncounterRead,
   completedEncounterStatus,
   inactiveEncounterStatus,
 } from "@/types/emr/encounter/encounter";
-import { Patient } from "@/types/emr/patient/patient";
-import { FacilityOrganization } from "@/types/facilityOrganization/facilityOrganization";
+import { PatientRead } from "@/types/emr/patient/patient";
+import { FacilityOrganizationRead } from "@/types/facilityOrganization/facilityOrganization";
 
 export interface PatientInfoCardProps {
-  patient: Patient;
-  encounter: Encounter;
+  patient: PatientRead;
+  encounter: EncounterRead;
   fetchPatientData?: (state: { aborted: boolean }) => void;
   canWrite: boolean;
   disableButtons?: boolean;
@@ -548,7 +548,7 @@ export default function PatientInfoCard(props: PatientInfoCardProps) {
     </>
   );
 
-  function organizationBadge(org: FacilityOrganization) {
+  function organizationBadge(org: FacilityOrganizationRead) {
     return (
       <Badge
         key={org.id}

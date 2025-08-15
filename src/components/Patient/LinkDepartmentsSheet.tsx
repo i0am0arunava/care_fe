@@ -19,13 +19,14 @@ import mutate from "@/Utils/request/mutate";
 import FacilityOrganizationSelector from "@/pages/Facility/settings/organizations/components/FacilityOrganizationSelector";
 import { BatchRequestBody } from "@/types/base/batch/batch";
 import deviceApi from "@/types/device/deviceApi";
-import { FacilityOrganization } from "@/types/facilityOrganization/facilityOrganization";
+import encounterApi from "@/types/emr/encounter/encounterApi";
+import { FacilityOrganizationRead } from "@/types/facilityOrganization/facilityOrganization";
 import locationApi from "@/types/location/locationApi";
 
 interface Props {
   entityType: "encounter" | "location" | "device";
   entityId: string;
-  currentOrganizations: FacilityOrganization[];
+  currentOrganizations: FacilityOrganizationRead[];
   facilityId: string;
   trigger?: React.ReactNode;
   onUpdate?: () => void;
@@ -33,8 +34,8 @@ interface Props {
 }
 
 type MutationRoute =
-  | typeof routes.encounter.addOrganization
-  | typeof routes.encounter.removeOrganization
+  | typeof encounterApi.addOrganization
+  | typeof encounterApi.removeOrganization
   | typeof locationApi.addOrganization
   | typeof locationApi.removeOrganization
   | typeof deviceApi.addOrganization
@@ -71,8 +72,8 @@ function getMutationParams(
   if (entityType === "encounter") {
     return {
       route: isAdd
-        ? routes.encounter.addOrganization
-        : routes.encounter.removeOrganization,
+        ? encounterApi.addOrganization
+        : encounterApi.removeOrganization,
       pathParams: { encounterId: entityId } as EncounterPathParams,
       queryKey: ["encounter", entityId],
     };

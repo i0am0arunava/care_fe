@@ -40,12 +40,12 @@ import { formatName } from "@/Utils/utils";
 import FacilityOrganizationSelector from "@/pages/Facility/settings/organizations/components/FacilityOrganizationSelector";
 import { Code } from "@/types/base/code/code";
 import careTeamApi from "@/types/careTeam/careTeamApi";
-import { Encounter } from "@/types/emr/encounter/encounter";
-import { UserBase } from "@/types/user/user";
+import { EncounterRead } from "@/types/emr/encounter/encounter";
+import { UserReadMinimal } from "@/types/user/user";
 
 type CareTeamSheetProps = {
   trigger: React.ReactNode;
-  encounter: Encounter;
+  encounter: EncounterRead;
   canWrite: boolean;
 };
 
@@ -71,10 +71,14 @@ export function CareTeamSheet({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
-  const [selectedUser, setSelectedUser] = useState<UserBase | undefined>();
+  const [selectedUser, setSelectedUser] = useState<
+    UserReadMinimal | undefined
+  >();
   const [selectedOrganization, setSelectedOrganization] = useState<string>("");
   const [selectedRole, setSelectedRole] = useState<Code | null>(null);
-  const [memberToRemove, setMemberToRemove] = useState<UserBase | undefined>();
+  const [memberToRemove, setMemberToRemove] = useState<
+    UserReadMinimal | undefined
+  >();
 
   // Reset state when sheet is closed
   useEffect(() => {
@@ -138,7 +142,7 @@ export function CareTeamSheet({
     setSelectedUser(undefined);
   };
 
-  const confirmRemoveMember = (member: UserBase) => {
+  const confirmRemoveMember = (member: UserReadMinimal) => {
     setMemberToRemove(member);
   };
 

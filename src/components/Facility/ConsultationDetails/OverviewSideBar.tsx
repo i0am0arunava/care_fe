@@ -1,5 +1,6 @@
-import { Building, EditIcon, NotebookPen } from "lucide-react";
+import { Building, EditIcon, NotebookPen, Pill } from "lucide-react";
 import { navigate } from "raviger";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import CareIcon from "@/CAREUI/icons/CareIcon";
@@ -7,6 +8,7 @@ import CareIcon from "@/CAREUI/icons/CareIcon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { LocationSelectorDialog } from "@/components/ui/sidebar/facility/location/location-switcher";
 
 import { CareTeamSheet } from "@/components/CareTeam/CareTeamSheet";
 import { LocationSheet } from "@/components/Location/LocationSheet";
@@ -19,10 +21,11 @@ import useQuestionnaireOptions from "@/hooks/useQuestionnaireOptions";
 import { formatDateTime, formatName } from "@/Utils/utils";
 import EncounterProperties from "@/pages/Encounters/EncounterProperties";
 import { useEncounter } from "@/pages/Encounters/utils/EncounterProvider";
-import { Encounter } from "@/types/emr/encounter/encounter";
+import { EncounterRead } from "@/types/emr/encounter/encounter";
+import { LocationList } from "@/types/location/location";
 
 interface Props {
-  encounter: Encounter;
+  encounter: EncounterRead;
   canAccess: boolean;
   canEdit: boolean;
 }
@@ -78,6 +81,8 @@ const Actions = () => {
             </Button>
 
             <ManageCareTeamButton />
+
+            <DispenseMedicineButton />
           </>
         )}
 
@@ -141,7 +146,39 @@ const ManageCareTeamButton = () => {
   );
 };
 
-const Questionnaires = ({ encounter }: { encounter: Encounter }) => {
+const DispenseMedicineButton = () => {
+  const { t } = useTranslation();
+  const [openDialog, setOpenDialog] = useState(false);
+  const [location, setLocation] = useState<LocationList | undefined>(undefined);
+  const { selectedEncounter } = useEncounter();
+
+  const navigateUrl = (selectedLocation: LocationList) =>
+    `/facility/${selectedEncounter?.facility.id}/locations/${selectedLocation.id}/medication_requests/patient/${selectedEncounter?.patient.id}/bill?encounterId=${selectedEncounter?.id}`;
+
+  return (
+    <>
+      <LocationSelectorDialog
+        facilityId={selectedEncounter?.facility.id || ""}
+        location={location}
+        setLocation={setLocation}
+        open={openDialog}
+        setOpen={setOpenDialog}
+        navigateUrl={navigateUrl}
+        myLocations={true}
+      />
+      <Button
+        variant="outline"
+        className="justify-start"
+        onClick={() => setOpenDialog(true)}
+      >
+        <Pill className="size-4" />
+        {t("dispense_medicine")}
+      </Button>
+    </>
+  );
+};
+
+const Questionnaires = ({ encounter }: { encounter: EncounterRead }) => {
   const { t } = useTranslation();
 
   const questionnaireOptions = useQuestionnaireOptions("encounter_actions");
@@ -180,7 +217,7 @@ const Locations = ({
   encounter,
 }: {
   canEdit: boolean;
-  encounter: Encounter;
+  encounter: EncounterRead;
 }) => {
   const { t } = useTranslation();
 
@@ -234,7 +271,7 @@ const DepartmentsAndTeams = ({
   encounter,
 }: {
   canEdit: boolean;
-  encounter: Encounter;
+  encounter: EncounterRead;
 }) => {
   const { t } = useTranslation();
 
@@ -276,7 +313,7 @@ const DepartmentsAndTeams = ({
   );
 };
 
-const AuditLogs = ({ encounter }: { encounter: Encounter }) => {
+const AuditLogs = ({ encounter }: { encounter: EncounterRead }) => {
   const { t } = useTranslation();
 
   return (

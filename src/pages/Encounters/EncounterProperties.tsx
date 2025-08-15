@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Edit2Icon, MapPinIcon, PenIcon } from "lucide-react";
+import React from "react";
 import { useTranslation } from "react-i18next";
 
 import CareIcon from "@/CAREUI/icons/CareIcon";
@@ -22,11 +23,11 @@ import { formatDateTime } from "@/Utils/utils";
 import {
   ENCOUNTER_CLASS_ICONS,
   ENCOUNTER_STATUS_ICONS,
-  Encounter,
+  EncounterRead,
 } from "@/types/emr/encounter/encounter";
 
 interface Props {
-  encounter: Encounter;
+  encounter: EncounterRead;
   canEdit: boolean;
 }
 
@@ -195,21 +196,16 @@ export default function EncounterProperties({ encounter, canEdit }: Props) {
   );
 }
 
-const StatusBadge = ({ encounter }: { encounter: Encounter }) => {
+const StatusBadge = ({ encounter }: { encounter: EncounterRead }) => {
   const { t } = useTranslation();
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Badge variant="blue" size="sm" className="cursor-pointer">
-          <CareIcon
-            icon={
-              ENCOUNTER_STATUS_ICONS[
-                encounter.status as keyof typeof ENCOUNTER_STATUS_ICONS
-              ] ?? "l-spinner"
-            }
-            className="size-3"
-          />
+          {React.createElement(ENCOUNTER_STATUS_ICONS[encounter.status], {
+            className: "size-3",
+          })}
           {t(`encounter_status__${encounter.status}`)}
           <ChevronDown className="size-3 opacity-50" />
         </Badge>
@@ -237,7 +233,7 @@ const LocationPropertyBadge = ({
   encounter,
   canEdit,
 }: {
-  encounter: Encounter;
+  encounter: EncounterRead;
   canEdit: boolean;
 }) => {
   const { t } = useTranslation();
